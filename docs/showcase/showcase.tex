@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 8 Projects $\cdot$ 118 Tests $\cdot$ 14{,}000+ Lines of Production Code}
+    {\normalsize\sffamily 9 Projects $\cdot$ 132 Tests $\cdot$ 16{,}000+ Lines of Production Code}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -467,6 +467,58 @@ For exotic options with no analytical Greeks, this approach is the only practica
 \newpage
 
 %% ============================================================================
+\section*{Project 09 --- CVA Counterparty Credit Risk}
+%% ============================================================================
+
+\begin{problembox}
+When you enter a derivative contract, there is a risk that your counterparty defaults before maturity.
+If they owe you money at the time of default, you lose that value (minus recovery).
+CVA (Credit Valuation Adjustment) prices this risk: it is the expected loss from counterparty default integrated over the life of the trade.
+The challenge: you must simulate future derivative values AND model the counterparty's default probability simultaneously.
+\end{problembox}
+
+\begin{answerbox}
+We simulate interest rate paths (Vasicek model), mark-to-market a swap portfolio at each future date, compute exposure profiles (Expected Exposure and Potential Future Exposure), extract default probabilities from CDS spreads, and calculate CVA/DVA.
+We also model netting (multiple trades with one counterparty) and wrong-way risk (exposure and default are correlated).
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p09_exposure_profiles.png}
+    \caption{Exposure profile for a 5-year interest rate swap. EE peaks mid-life (the ``hump'' shape), then declines as remaining cash flows decrease. PFE at 97.5\% shows worst-case exposure.}
+\end{figure}
+
+\begin{interpbox}
+The \textbf{hump-shaped} EE profile is characteristic of interest rate swaps: early in the trade, few cash flows have been exchanged so exposure is low.
+Mid-life, the swap has maximum sensitivity to rate changes.
+Near maturity, few cash flows remain, so exposure drops.
+
+\textbf{PFE 97.5\%} (red dashed) shows the exposure that would only be exceeded 2.5\% of the time --- this is the worst-case scenario used for credit limit setting.
+The peak PFE of \$90K on a \$1M notional means the counterparty could potentially owe you up to 9\% of the notional under adverse rate moves.
+
+\textbf{CVA is computed by weighting EE by default probability at each time step}: CVA $ = (1-R) \sum_i \text{EE}(t_i) \cdot \Delta\text{PD}(t_i) \cdot D(t_i)$.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p09_wrong_way_risk.png}
+    \caption{Wrong-way risk: CVA increases sharply when exposure and default probability are positively correlated. Negative correlation (right-way risk) reduces CVA.}
+\end{figure}
+
+\begin{interpbox}
+\textbf{Wrong-way risk} is the nightmare scenario: your counterparty is most likely to default exactly when they owe you the most money.
+Example: you buy credit protection from a bank on mortgage securities --- if mortgages crash, the bank's default probability spikes AND your claim against them grows.
+
+The chart shows that at zero correlation, CVA is moderate.
+As \textbf{positive correlation} increases, CVA rises sharply --- the expected loss increases because defaults cluster with high exposure periods.
+\textbf{Negative correlation} (right-way risk) has the opposite effect: defaults tend to occur when exposure is low, reducing CVA.
+
+Basel III requires banks to identify and separately capitalize wrong-way risk exposures.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -483,8 +535,9 @@ For exotic options with no analytical Greeks, this approach is the only practica
 06 & Copula Dependency            & 12 & 5 copula families, PIT, joint simulation \\
 07 & Stress Testing               & 14 & DFAST, historical replay, reverse stress testing \\
 08 & Deep Hedging                 & 13 & Neural network hedging, CVaR optimization \\
+09 & CVA Counterparty Risk        & 14 & Exposure profiles, netting, wrong-way risk \\
 \addlinespace
-   & \textbf{Total}               & \textbf{118} & \textbf{14{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{132} & \textbf{16{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

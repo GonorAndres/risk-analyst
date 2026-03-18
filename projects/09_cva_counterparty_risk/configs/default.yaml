@@ -1,0 +1,32 @@
+interest_rate:
+  r0: 0.03
+  kappa: 0.5
+  theta: 0.04
+  sigma: 0.01
+
+swap:
+  notional: 1000000
+  fixed_rate: 0.04
+  tenor: 5.0
+  payment_freq: 0.25  # quarterly
+
+counterparty:
+  cds_spread: 0.01  # 100 bps
+  recovery: 0.40
+
+own_credit:
+  cds_spread: 0.005  # 50 bps
+  recovery: 0.40
+
+netting:
+  n_trades: 3
+  threshold: 0  # no threshold (fully collateralized = 0)
+
+simulation:
+  n_paths: 5000
+  n_steps: 20  # quarterly over 5 years
+
+wrong_way_risk:
+  correlations: [-0.5, -0.25, 0.0, 0.25, 0.5, 0.75]
+
+random_seed: 42

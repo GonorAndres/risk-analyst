@@ -1,0 +1,987 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+\newcommand{\PnL}{\operatorname{PnL}}
+\newcommand{\CVA}{\operatorname{CVA}}
+\newcommand{\EE}{\operatorname{EE}}
+\newcommand{\PFE}{\operatorname{PFE}}
+\newcommand{\EPE}{\operatorname{EPE}}
+\newcommand{\LGD}{\operatorname{LGD}}
+\newcommand{\PD}{\operatorname{PD}}
+
+\title{%
+    \textbf{CVA and Counterparty Credit Risk} \\[0.5em]
+    \large Pricing the Risk That Your Counterparty Defaults
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied treatment of Credit Valuation Adjustment (CVA) and counterparty credit risk ---
+the risk that a trading counterparty defaults when it owes you money.
+We develop the CVA framework from first principles: what counterparty risk is and why it
+differs from market risk and traditional credit risk; the CVA formula as the expected loss
+from counterparty default; how to construct exposure profiles via Monte Carlo simulation;
+how to extract default probabilities from CDS spreads; the role of netting agreements and
+collateral in reducing exposure; the amplifying effect of wrong-way risk; and the regulatory
+treatment under Basel~III/IV.
+A worked numerical example runs throughout: computing CVA for a 5-year interest rate swap
+with quarterly rebalancing, realistic recovery rates, and CDS-implied default probabilities.
+We assume familiarity with derivatives pricing, basic credit risk concepts, and Monte Carlo methods.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{What Is Counterparty Credit Risk?}
+\label{sec:counterparty-risk}
+%% ============================================================================
+
+You enter a 5-year interest rate swap with Bank~X\@.
+Under this contract, you pay a fixed rate and receive a floating rate on a notional
+of \$100 million.
+Three years in, Bank~X defaults.
+At that moment, the swap has a positive mark-to-market value of \$4 million to you ---
+Bank~X owes you money.
+But Bank~X is now in bankruptcy.
+You will not recover the full \$4 million; perhaps you recover 40\% through the
+bankruptcy process, losing \$2.4 million.
+
+This is \textbf{counterparty credit risk}: the risk of loss arising from the default
+of a counterparty to a financial contract, when that contract has positive value to you
+at the time of default.
+
+\subsection{How It Differs from Other Risks}
+
+Counterparty credit risk sits at the intersection of market risk and credit risk,
+but is distinct from both:
+
+\begin{itemize}
+    \item \textbf{Market risk}: the risk that the value of a position changes due to
+          movements in market variables (interest rates, FX rates, equity prices).
+          Market risk exists whether or not anyone defaults.
+    \item \textbf{Credit risk} (lending): the risk that a borrower fails to repay a loan.
+          The exposure is known and fixed --- the outstanding principal.
+    \item \textbf{Counterparty credit risk}: the risk that a trading counterparty defaults
+          on a \emph{derivative} contract.
+          The critical difference: the exposure is \emph{uncertain} and \emph{two-sided}.
+          A swap can have positive or negative value to you depending on how rates move.
+          You only lose if the counterparty defaults \emph{and} the contract is in your favour.
+\end{itemize}
+
+\begin{keyidea}
+Counterparty credit risk has three distinguishing features:
+\begin{enumerate}
+    \item \textbf{Stochastic exposure}: unlike a loan, the amount at risk changes with
+          market conditions.
+    \item \textbf{Bilateral nature}: both parties can owe each other money.
+          You face counterparty risk only when the mark-to-market is positive to you.
+    \item \textbf{Time dimension}: the counterparty can default at any point over the
+          life of the trade, and your exposure at that moment is what determines your loss.
+\end{enumerate}
+\end{keyidea}
+
+\subsection{The Lehman Lesson}
+
+When Lehman Brothers filed for bankruptcy on 15 September 2008, it had approximately
+930{,}000 outstanding derivative contracts with counterparties worldwide.
+The total notional exceeded \$35 trillion.
+Counterparties faced two immediate problems:
+
+\begin{enumerate}
+    \item \textbf{Direct losses}: where Lehman owed money on in-the-money contracts,
+          counterparties recovered only a fraction (ultimately around 28 cents on the dollar
+          for senior unsecured claims).
+    \item \textbf{Replacement cost}: counterparties had to re-enter equivalent contracts
+          with new counterparties, often at worse market rates because the market had moved
+          violently during the crisis.
+\end{enumerate}
+
+The total counterparty credit losses from the Lehman default were estimated at
+\$5--\$8 billion for its derivative counterparties alone.
+This event demonstrated that counterparty risk was not a theoretical concern but a
+first-order risk that required explicit pricing and management.
+
+\begin{warningbox}
+Before 2008, many banks treated counterparty risk as a secondary concern,
+relying on the assumption that large financial institutions would not default.
+The Lehman collapse destroyed this assumption permanently.
+Since then, CVA has become one of the largest valuation adjustments on bank
+trading books, often exceeding the profit margin on individual trades.
+\end{warningbox}
+
+\subsection{When Does Counterparty Risk Arise?}
+
+Counterparty credit risk arises in \textbf{over-the-counter (OTC) derivatives} ---
+contracts negotiated bilaterally between two parties, as opposed to
+exchange-traded instruments where a central clearinghouse guarantees performance.
+
+Common OTC instruments with significant counterparty risk:
+\begin{itemize}
+    \item Interest rate swaps (the largest market by notional)
+    \item Cross-currency swaps
+    \item Credit default swaps (CDS)
+    \item Equity options and total return swaps
+    \item Commodity forwards and swaps
+    \item Foreign exchange forwards (beyond short tenors)
+\end{itemize}
+
+Since the Dodd--Frank Act (2010) and EMIR in Europe, many standardized OTC derivatives
+must be centrally cleared, which transfers counterparty risk to the clearinghouse.
+However, a substantial volume of non-standard (``bespoke'') derivatives remains
+bilaterally traded, and counterparty risk on these trades must be managed directly.
+
+%% ============================================================================
+\section{CVA: The Price of Counterparty Risk}
+\label{sec:cva-formula}
+%% ============================================================================
+
+Credit Valuation Adjustment (CVA) is the market price of counterparty credit risk.
+It quantifies the expected loss due to counterparty default over the life of a trade
+or portfolio.
+
+\subsection{The Fundamental CVA Formula}
+
+The unilateral CVA is defined as:
+\begin{equation}\label{eq:cva-integral}
+    \CVA = (1 - R)\int_0^T \EE(t)\, d\PD(t)
+\end{equation}
+where:
+\begin{itemize}
+    \item $R$ is the \textbf{recovery rate} --- the fraction of the exposure recovered
+          in the event of default (typically 40\% for senior unsecured claims).
+    \item $\EE(t)$ is the \textbf{Expected Exposure} at time $t$ --- the average
+          positive value of the contract conditional on surviving to time $t$.
+    \item $\PD(t)$ is the \textbf{cumulative default probability} up to time $t$,
+          so $d\PD(t)$ represents the probability of default in the infinitesimal interval $[t, t+dt]$.
+    \item $T$ is the maturity of the contract.
+\end{itemize}
+
+The factor $(1 - R)$ is sometimes called the \textbf{Loss Given Default} ($\LGD$).
+If the counterparty defaults and you have \$1 of exposure, you lose \$(1 - R).
+
+\subsection{Discrete Approximation}
+
+In practice, we partition $[0, T]$ into $N$ time intervals with dates
+$t_0 = 0, t_1, \ldots, t_N = T$, and approximate:
+\begin{equation}\label{eq:cva-discrete}
+    \CVA = (1 - R)\sum_{i=1}^{N} \EE(t_i)\cdot\bigl[\PD(t_i) - \PD(t_{i-1})\bigr]
+\end{equation}
+Each term in the sum is the expected loss from a default occurring in the interval
+$(t_{i-1}, t_i]$: the exposure at that time, multiplied by the probability of default
+in that interval, multiplied by the loss given default.
+
+\begin{keyresult}
+CVA is the \textbf{risk-neutral expected loss} from counterparty default.
+It is subtracted from the risk-free (counterparty-risk-free) price of the contract.
+If the risk-free price of a swap is \$1{,}000{,}000 and CVA is \$50{,}000,
+then the fair value accounting for counterparty risk is \$950{,}000.
+\[
+    V_{\text{risky}} = V_{\text{risk-free}} - \CVA
+\]
+The counterparty effectively ``charges'' you for the credit risk they impose on the trade.
+\end{keyresult}
+
+\subsection{Worked Example: CVA for an Interest Rate Swap}
+
+\begin{example}[CVA calculation for a 5-year swap]\label{ex:cva-swap}
+Consider a 5-year pay-fixed, receive-floating interest rate swap with notional \$100M\@.
+Suppose we have computed the following exposure profile and default probabilities
+(from CDS spreads, as derived in Section~\ref{sec:default-probability}):
+
+\begin{center}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Year} $t_i$ & $\EE(t_i)$ (\$M) & $\PD(t_i)$ & $\PD(t_i) - \PD(t_{i-1})$ \\
+\midrule
+1 & 1.2 & 1.65\% & 1.65\% \\
+2 & 2.1 & 3.25\% & 1.60\% \\
+3 & 2.8 & 4.80\% & 1.55\% \\
+4 & 2.3 & 6.30\% & 1.50\% \\
+5 & 1.5 & 7.75\% & 1.45\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+With recovery rate $R = 40\%$:
+\begin{align*}
+    \CVA &= (1 - 0.40)\bigl[1.2 \times 0.0165 + 2.1 \times 0.0160 + 2.8 \times 0.0155 \\
+         &\quad + 2.3 \times 0.0150 + 1.5 \times 0.0145\bigr] \\
+         &= 0.60 \times [0.0198 + 0.0336 + 0.0434 + 0.0345 + 0.0218] \\
+         &= 0.60 \times 0.1531 \\
+         &= 0.0919 \text{ (\$M)}
+\end{align*}
+The CVA is approximately \$92{,}000 on a \$100M notional swap.
+This amount would be charged to the counterparty at trade inception as a credit
+adjustment, or reserved on the trading book as a valuation adjustment.
+\end{example}
+
+\begin{remark}
+The exposure profile has a characteristic ``hump'' shape for interest rate swaps:
+exposure starts near zero (the swap is at-the-money at inception),
+rises as rates drift and dispersion grows, then declines as the remaining
+cash flows decrease toward maturity.
+The peak exposure typically occurs at approximately one-third to one-half of the
+swap's tenor.
+\end{remark}
+
+\subsection{Bilateral CVA and DVA}
+
+The formula above is \emph{unilateral} CVA --- it accounts for the counterparty's
+default only.
+But you can also default on your counterparty.
+The \textbf{Debit Valuation Adjustment} (DVA) is the symmetric quantity:
+\[
+    \text{DVA} = (1 - R_{\text{own}})\sum_{i=1}^{N} \text{NEE}(t_i)\cdot
+    \bigl[\PD_{\text{own}}(t_i) - \PD_{\text{own}}(t_{i-1})\bigr]
+\]
+where $\text{NEE}(t)$ is the negative expected exposure (what you owe the counterparty)
+and $\PD_{\text{own}}$ is your own default probability.
+
+The bilateral adjustment is:
+\[
+    V_{\text{risky}} = V_{\text{risk-free}} - \CVA + \text{DVA}
+\]
+
+\begin{warningbox}
+DVA is controversial: it implies that your derivative position \emph{increases} in value
+when your own credit quality deteriorates.
+If your CDS spread widens, DVA rises, producing a ``profit.''
+This is economically logical (your counterparty benefits from your higher default probability)
+but practically problematic --- you cannot monetize your own default.
+Under IFRS~13 and ASC~820, DVA must be recognized in fair value, but Basel~III excludes
+DVA from regulatory capital.
+\end{warningbox}
+
+%% ============================================================================
+\section{Exposure Profiles}
+\label{sec:exposure-profiles}
+%% ============================================================================
+
+The exposure profile $\EE(t)$ is the engine of CVA computation.
+To compute it, we need to simulate the future value of the contract under
+many scenarios.
+
+\subsection{Key Exposure Metrics}
+
+Let $V(t)$ denote the mark-to-market value of the contract at time $t$.
+Your credit exposure is $\max(V(t), 0)$ --- you are exposed only when
+the counterparty owes you money.
+
+\begin{definition}[Exposure Metrics]\label{def:exposure-metrics}
+The key exposure measures are:
+\begin{align}
+    \EE(t) &= \EV\bigl[\max(V(t), 0)\bigr]
+    && \text{(Expected Exposure)} \label{eq:ee}\\[4pt]
+    \PFE_\alpha(t) &= \inf\bigl\{x : \PV\bigl[\max(V(t), 0) \leq x\bigr] \geq \alpha\bigr\}
+    && \text{(Potential Future Exposure)} \label{eq:pfe}\\[4pt]
+    \EPE &= \frac{1}{T}\int_0^T \EE(t)\, dt
+    && \text{(Expected Positive Exposure)} \label{eq:epe}
+\end{align}
+\end{definition}
+
+\begin{itemize}
+    \item $\EE(t)$ is the \textbf{average positive value} across scenarios at time $t$.
+          This is the key input to the CVA formula.
+    \item $\PFE_\alpha(t)$ is the $\alpha$-quantile of the positive exposure distribution.
+          With $\alpha = 97.5\%$, it answers: ``what is the worst-case exposure exceeded
+          only 2.5\% of the time?''
+          PFE is used for \textbf{credit limit management} --- setting maximum exposure
+          to any single counterparty.
+    \item $\EPE$ is the time-averaged expected exposure.
+          It is used in the \textbf{Basel regulatory capital} calculation as a simplified
+          measure of overall exposure.
+\end{itemize}
+
+\subsection{Monte Carlo Exposure Simulation}
+
+The standard approach to computing exposure profiles is Monte Carlo simulation:
+
+\begin{enumerate}
+    \item \textbf{Simulate risk factors}: generate $M$ scenarios (e.g., $M = 10{,}000$)
+          of the underlying risk factors (interest rates, FX rates, etc.)\ at each
+          future date $t_1, \ldots, t_N$.
+    \item \textbf{Value the contract}: for each scenario $j$ and each date $t_i$,
+          compute the mark-to-market value $V^{(j)}(t_i)$ of the contract.
+    \item \textbf{Compute positive exposure}: set
+          $E^{(j)}(t_i) = \max\bigl(V^{(j)}(t_i), 0\bigr)$.
+    \item \textbf{Aggregate}:
+          \[
+              \EE(t_i) = \frac{1}{M}\sum_{j=1}^{M} E^{(j)}(t_i), \qquad
+              \PFE_{97.5\%}(t_i) = \text{97.5th percentile of } \{E^{(j)}(t_i)\}_{j=1}^{M}
+          \]
+\end{enumerate}
+
+\begin{example}[Exposure simulation for a 5-year swap]\label{ex:exposure-sim}
+Consider a 5-year pay-fixed, receive-floating swap on 3-month SOFR, notional \$100M,
+fixed rate 3.5\%, quarterly payment dates.
+
+\textbf{Simulation}: generate 10{,}000 interest rate paths using a Hull--White model
+calibrated to the current yield curve and swaption volatilities.
+At each quarterly date (20 dates total), price the residual swap under each scenario.
+
+\textbf{Representative results}:
+\begin{center}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Year} & $\EE(t)$ (\$M) & $\PFE_{97.5\%}(t)$ (\$M) & $\PFE_{97.5\%}/\EE$ ratio \\
+\midrule
+0.5  & 0.7  & 2.1  & 3.0 \\
+1.0  & 1.2  & 3.8  & 3.2 \\
+2.0  & 2.1  & 6.5  & 3.1 \\
+3.0  & 2.8  & 8.2  & 2.9 \\
+4.0  & 2.3  & 6.1  & 2.7 \\
+5.0  & 1.5  & 3.9  & 2.6 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Observations}:
+\begin{enumerate}
+    \item The exposure profile has a \textbf{hump shape}: it rises as rate uncertainty
+          grows, peaks around year 2--3, and declines as the remaining cash flows
+          shrink (``pull-to-par'' effect).
+    \item PFE is roughly 2.5--3.2 times EE\@.
+          The ratio is higher at shorter horizons where the distribution of exposure
+          is more skewed (many paths still near zero, but some have moved significantly).
+    \item At maturity ($t = 5$), both EE and PFE drop --- only the final coupon
+          exchange remains.
+\end{enumerate}
+\end{example}
+
+\begin{keyidea}
+The exposure profile depends heavily on the \textbf{type of derivative}:
+\begin{itemize}
+    \item \textbf{Interest rate swaps}: hump-shaped profile (diffusion then pull-to-par).
+    \item \textbf{Cross-currency swaps}: exposure grows toward maturity because of
+          the final notional exchange, producing an \emph{increasing} profile.
+    \item \textbf{FX forwards}: exposure grows monotonically until settlement.
+    \item \textbf{Options}: exposure is bounded by the option value;
+          for purchased options, it can only decrease after the initial premium is paid.
+\end{itemize}
+Understanding these shapes is essential for intuition about which trades
+drive CVA in a portfolio.
+\end{keyidea}
+
+%% ============================================================================
+\section{Default Probability from CDS Spreads}
+\label{sec:default-probability}
+%% ============================================================================
+
+The CVA formula requires the counterparty's default probability curve $\PD(t)$.
+The market-standard source is \textbf{Credit Default Swap (CDS) spreads},
+which embed the market's view of default risk.
+
+\subsection{CDS Basics}
+
+A CDS is an insurance contract on a reference entity's default.
+The protection buyer pays a periodic premium (the CDS spread $s$) and,
+if the reference entity defaults, receives $(1 - R)$ times the notional.
+In a fair CDS, the expected premium payments equal the expected default payment:
+\[
+    s \sum_{i=1}^{N} \Delta t_i \cdot Q(t_i)
+    \approx (1 - R)\sum_{i=1}^{N} \bigl[Q(t_{i-1}) - Q(t_i)\bigr]
+\]
+where $Q(t) = 1 - \PD(t)$ is the survival probability and we have omitted discounting
+for clarity.
+
+\subsection{Hazard Rate and Survival Probability}
+
+Under a constant hazard rate model, the default intensity is a constant $\lambda$:
+\begin{align}
+    Q(t) &= e^{-\lambda t} && \text{(Survival probability)} \label{eq:survival}\\
+    \PD(t) &= 1 - e^{-\lambda t} && \text{(Cumulative default probability)} \label{eq:pd}
+\end{align}
+
+The probability of default in a small interval $[t, t + dt]$ given survival to $t$
+is $\lambda\, dt$.
+
+For a flat CDS spread $s$ and constant recovery $R$, the implied hazard rate is
+approximately:
+\begin{equation}\label{eq:hazard-approx}
+    \lambda \approx \frac{s}{1 - R}
+\end{equation}
+
+This approximation is excellent for investment-grade names (where $\lambda$ is small)
+and provides the key intuition: the hazard rate is the CDS spread divided by the
+loss given default.
+
+\begin{example}[Default probability from CDS spread]\label{ex:cds-bootstrap}
+A counterparty has a 5-year CDS spread of 100 basis points (bps) and
+assumed recovery rate $R = 40\%$.
+
+\textbf{Step 1}: compute the hazard rate:
+\[
+    \lambda = \frac{s}{1 - R} = \frac{0.0100}{1 - 0.40} = \frac{0.0100}{0.60} = 0.01\overline{6} = 1.67\% \text{ per year}
+\]
+
+\textbf{Step 2}: compute survival and default probabilities:
+\begin{center}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Year} $t$ & $Q(t) = e^{-\lambda t}$ & $\PD(t) = 1 - Q(t)$ & $\PD(t_i) - \PD(t_{i-1})$ \\
+\midrule
+1 & 98.35\% & 1.65\% & 1.65\% \\
+2 & 96.73\% & 3.27\% & 1.62\% \\
+3 & 95.12\% & 4.88\% & 1.61\% \\
+4 & 93.54\% & 6.46\% & 1.58\% \\
+5 & 91.98\% & 8.02\% & 1.56\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 5-year cumulative default probability is approximately 8.0\%.
+The marginal (annual) default probability declines slightly because the hazard rate
+is applied to a shrinking pool of surviving paths.
+\end{example}
+
+\subsection{Bootstrapping from the CDS Term Structure}
+
+In practice, CDS spreads are quoted at multiple tenors (1Y, 3Y, 5Y, 7Y, 10Y),
+and the hazard rate is \emph{not} constant.
+The bootstrap procedure extracts a piecewise-constant hazard rate curve:
+
+\begin{enumerate}
+    \item Start with the 1Y CDS spread $s_1$.
+          Solve for $\lambda_1$ such that the 1Y CDS is fairly priced.
+    \item Given $\lambda_1$, use the 3Y CDS spread $s_3$ to solve for $\lambda_2$
+          (the hazard rate for the interval $(1, 3]$).
+    \item Continue for each subsequent tenor, solving for the hazard rate in each interval.
+\end{enumerate}
+
+\begin{example}[Bootstrap from CDS term structure]\label{ex:cds-term}
+Suppose the following CDS spreads (with $R = 40\%$):
+
+\begin{center}
+\begin{tabular}{@{}cc@{\qquad}cc@{}}
+\toprule
+\textbf{Tenor} & \textbf{CDS spread (bps)} & \textbf{Implied } $\lambda$ & $\PD$ \text{(cumulative)} \\
+\midrule
+1Y  &  60  & 1.00\% & 1.00\% \\
+3Y  &  80  & 1.43\% & 3.79\% \\
+5Y  & 100  & 1.82\% & 7.24\% \\
+7Y  & 110  & 1.50\% & 9.50\% \\
+10Y & 120  & 1.67\% & 14.2\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The increasing CDS term structure implies that the market expects the hazard rate
+to be higher at longer horizons --- a normal credit curve.
+An inverted curve (decreasing spreads) would suggest near-term distress.
+\end{example}
+
+\begin{keyresult}
+CDS spreads are the market's most liquid and direct measure of default risk.
+The hazard rate $\lambda \approx s / (1 - R)$ translates spreads into default
+probabilities.
+These probabilities are \textbf{risk-neutral} (they embed a credit risk premium),
+so they are typically higher than historical default rates.
+For CVA pricing purposes, we use risk-neutral probabilities --- the same principle
+as using risk-neutral pricing for derivatives.
+\end{keyresult}
+
+%% ============================================================================
+\section{Netting and Collateral}
+\label{sec:netting-collateral}
+%% ============================================================================
+
+In practice, CVA is computed not on individual trades but on \textbf{netting sets} ---
+groups of trades with the same counterparty governed by a single legal agreement.
+Netting and collateral are the two most powerful tools for reducing counterparty exposure.
+
+\subsection{Netting Agreements}
+
+An ISDA Master Agreement with a close-out netting clause establishes that, upon default,
+all trades under the agreement are terminated and their values are netted to a
+single amount.
+If you have 50 trades with a counterparty, some with positive and some with negative
+mark-to-market, your exposure is:
+\[
+    E_{\text{net}}(t) = \max\!\left(\sum_{k=1}^{50} V_k(t),\; 0\right)
+\]
+\textbf{not} the sum of individual positive exposures:
+\[
+    E_{\text{gross}}(t) = \sum_{k=1}^{50} \max\bigl(V_k(t), 0\bigr)
+\]
+
+The netting benefit is:
+\[
+    E_{\text{gross}}(t) - E_{\text{net}}(t) \geq 0
+\]
+which is always non-negative (by the subadditivity of the max function).
+
+\begin{keyidea}
+Netting can dramatically reduce exposure.
+Consider a counterparty where you have an interest rate swap worth $+\$5$M
+and a cross-currency swap worth $-\$3$M\@.
+\begin{itemize}
+    \item \textbf{Without netting}: exposure = $\$5$M (the negative swap is ignored).
+    \item \textbf{With netting}: exposure = $\max(5 - 3, 0) = \$2$M\@.
+\end{itemize}
+A 60\% reduction.
+For large portfolios with many offsetting positions, the netting benefit
+can exceed 80\% of the gross exposure.
+\end{keyidea}
+
+\begin{example}[Netting benefit]\label{ex:netting}
+A bank has the following five trades with counterparty~C, all under a single
+ISDA Master Agreement:
+
+\begin{center}
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Trade} & \textbf{MtM (\$M)} \\
+\midrule
+5Y IRS (pay fixed)        & $+3.2$ \\
+3Y IRS (receive fixed)    & $-1.8$ \\
+7Y cross-currency swap    & $+4.5$ \\
+FX forward (6 months)     & $-0.6$ \\
+Equity option (purchased) & $+1.1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Gross exposure}: $3.2 + 0 + 4.5 + 0 + 1.1 = \$8.8$M (sum of positive values).
+
+\textbf{Net exposure}: $\max(3.2 - 1.8 + 4.5 - 0.6 + 1.1,\; 0) = \max(6.4,\; 0) = \$6.4$M.
+
+\textbf{Netting benefit}: $\$8.8$M $- \$6.4$M $= \$2.4$M, a 27\% reduction.
+The benefit would be larger if the portfolio had more balanced positive and negative values.
+\end{example}
+
+\subsection{Collateral (CSA Agreements)}
+
+A Credit Support Annex (CSA) to the ISDA Master Agreement requires counterparties
+to post collateral (cash or high-quality securities) when the mark-to-market
+exceeds a specified threshold.
+
+Key CSA parameters:
+\begin{itemize}
+    \item \textbf{Threshold} ($H$): exposure below this level requires no collateral.
+    \item \textbf{Minimum Transfer Amount} (MTA): collateral calls below this amount
+          are not made (to avoid operational costs on small amounts).
+    \item \textbf{Margin frequency}: how often collateral is recalculated (daily, weekly).
+    \item \textbf{Independent amount}: an initial margin posted regardless of exposure
+          (similar to exchange-traded initial margin).
+\end{itemize}
+
+With a CSA in place, the \textbf{collateralized exposure} at time $t$ is approximately:
+\begin{equation}\label{eq:collateral-exposure}
+    E_{\text{coll}}(t) = \max\bigl(V(t) - C(t),\; 0\bigr)
+\end{equation}
+where $C(t)$ is the collateral held at time $t$.
+
+\subsection{Margin Period of Risk}
+
+Even with daily margining, collateral is not instantaneous.
+The \textbf{Margin Period of Risk} (MPoR) is the time between the last successful
+collateral exchange and the close-out of positions following a default.
+During this period, the exposure can increase without being covered by collateral.
+
+\begin{warningbox}
+The Basel Committee sets a minimum MPoR of 10 business days for bilateral trades
+and 5 business days for centrally cleared trades.
+During these 10 days, the counterparty may default, and the exposure can grow significantly.
+The CVA on a collateralized trade is therefore \emph{not} zero --- it reflects the
+exposure that can build up during the MPoR\@.
+For volatile products or stressed markets, the 10-day MPoR exposure can still be
+substantial.
+\end{warningbox}
+
+\begin{keyresult}
+The combined effect of netting and collateral reduces CVA dramatically:
+\begin{center}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Configuration} & \textbf{EPE (\$M)} & \textbf{CVA (\$K)} \\
+\midrule
+Gross (no netting)           & 8.8 & 440 \\
+Netted (ISDA)                & 4.2 & 210 \\
+Netted + CSA ($H = 0$, daily) & 0.8 &  40 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Representative values for a diversified portfolio.
+Netting reduces CVA by ${\sim}50\%$; adding collateral can reduce it by a further
+${\sim}80\%$.
+\end{keyresult}
+
+%% ============================================================================
+\section{Wrong-Way Risk}
+\label{sec:wrong-way-risk}
+%% ============================================================================
+
+The standard CVA formula~\eqref{eq:cva-integral} assumes that the counterparty's
+default probability is \textbf{independent} of the exposure.
+This assumption is often violated, sometimes catastrophically.
+
+\subsection{Definition}
+
+\begin{definition}[Wrong-Way Risk]\label{def:wwr}
+\textbf{Wrong-way risk} (WWR) arises when the counterparty's default probability
+is positively correlated with the exposure to that counterparty:
+\[
+    \operatorname{Corr}\bigl(\max(V(t), 0),\; \ind_{\{\tau \leq t\}}\bigr) > 0
+\]
+where $\tau$ is the default time.
+In other words, the counterparty is \emph{more likely to default precisely when
+it owes you the most}.
+\end{definition}
+
+The opposite --- \textbf{right-way risk} --- occurs when default probability is
+negatively correlated with exposure (the counterparty defaults when it owes you less).
+
+\subsection{Examples of Wrong-Way Risk}
+
+\textbf{Example 1: Protection from a correlated bank.}
+You buy credit protection (CDS) from Bank~A on a mortgage-backed security (MBS).
+If the housing market crashes:
+\begin{itemize}
+    \item The MBS value drops, making your CDS more valuable (exposure rises).
+    \item Bank~A, heavily exposed to mortgages, becomes more likely to default.
+\end{itemize}
+This is exactly what happened with AIG in 2008: AIG sold CDS protection on
+mortgage-related CDOs, and its creditworthiness deteriorated simultaneously
+with the rise in claims against it.
+
+\textbf{Example 2: FX swap with an emerging-market bank.}
+You enter a cross-currency swap with a Brazilian bank where you receive BRL
+and pay USD\@.
+If the BRL depreciates sharply:
+\begin{itemize}
+    \item The swap value to you increases (you receive more BRL per USD).
+    \item The Brazilian bank faces currency stress, and its default probability rises.
+\end{itemize}
+
+\textbf{Example 3: Equity swap with a corporate.}
+You enter a total return swap on Company~C's stock with Company~C as counterparty.
+If the stock price drops, Company~C's creditworthiness declines, but the swap
+has positive value to you (you are short the stock via the swap).
+
+\subsection{Impact on CVA}
+
+Under wrong-way risk, the true CVA is:
+\begin{equation}\label{eq:cva-wwr}
+    \CVA_{\text{WWR}} = (1 - R)\int_0^T \EV\!\bigl[\max(V(t), 0) \mid \tau = t\bigr]\, d\PD(t)
+\end{equation}
+Note the key difference from~\eqref{eq:cva-integral}: the expectation is now
+\emph{conditional on default at time $t$}, not unconditional.
+Under WWR, the conditional exposure $\EV[\max(V(t), 0) \mid \tau = t]$
+is higher than the unconditional $\EE(t)$, so:
+\[
+    \CVA_{\text{WWR}} > \CVA_{\text{independent}}
+\]
+
+\begin{warningbox}
+Wrong-way risk can increase CVA by \textbf{multiples}, not merely percentages.
+In extreme cases (e.g., buying protection from a counterparty on a highly correlated
+reference), the CVA under WWR can be 2--5 times the value computed under independence.
+The standard CVA formula without WWR adjustment can be dangerously misleading.
+\end{warningbox}
+
+\subsection{Modelling Approaches}
+
+Several approaches exist to incorporate wrong-way risk:
+
+\begin{enumerate}
+    \item \textbf{Alpha multiplier}: a regulatory shortcut.
+          Multiply the independent CVA by a factor $\alpha > 1$ (Basel sets $\alpha = 1.4$
+          as the default, though banks with IMM approval may use their own estimates).
+    \item \textbf{Copula models}: model the joint distribution of the exposure and
+          default time using a copula (e.g., Gaussian copula with a correlation parameter).
+          Simple to implement, but the correlation parameter is hard to calibrate.
+    \item \textbf{Structural models}: link the counterparty's default to the same
+          risk factors driving the exposure (e.g., interest rates, FX rates, equity prices).
+          The counterparty defaults when its asset value hits a barrier,
+          and the same market moves that increase exposure also push the counterparty
+          toward the barrier.
+    \item \textbf{Jump-to-default}: model a sudden jump in market variables upon default
+          (e.g., the counterparty's bonds drop to recovery value, correlated assets move).
+\end{enumerate}
+
+\begin{keyresult}
+Wrong-way risk is the ``hidden amplifier'' of counterparty risk.
+The standard CVA formula assumes independence between exposure and default,
+but many real trades exhibit positive correlation.
+Ignoring WWR leads to systematic underestimation of CVA\@.
+The Lehman default and AIG bailout both demonstrated that wrong-way risk
+materializes precisely in systemic crises when it matters most.
+\end{keyresult}
+
+%% ============================================================================
+\section{Regulatory CVA (Basel III/IV)}
+\label{sec:regulatory-cva}
+%% ============================================================================
+
+Following the 2008 financial crisis, regulators recognized that CVA losses ---
+not just outright counterparty defaults --- caused enormous losses for banks.
+Two-thirds of the counterparty credit losses during the crisis came from
+mark-to-market CVA losses (changes in CVA due to spread widening),
+not from actual defaults.
+
+Basel~III introduced a dedicated \textbf{CVA capital charge} to capture this risk.
+Basel~IV (the ``finalized Basel~III'' framework, effective from January 2025)
+revised the CVA capital framework significantly.
+
+\subsection{The CVA Capital Charge}
+
+The CVA capital charge is separate from the \textbf{counterparty default risk charge}
+(which covers actual losses from default, computed under CCR rules).
+The CVA charge specifically covers the risk of \textbf{mark-to-market losses}
+due to changes in the CVA --- that is, changes in credit spreads, exposure,
+and their interaction.
+
+\subsection{SA-CVA: Standardized Approach}
+
+The Standardized Approach for CVA (SA-CVA) is a sensitivity-based method,
+structurally similar to the FRTB Standardized Approach for market risk.
+
+\textbf{Key features}:
+\begin{enumerate}
+    \item Compute sensitivities of the aggregate CVA to risk factors:
+          counterparty credit spreads, interest rates, FX rates, equity prices,
+          and commodity prices.
+    \item Apply prescribed risk weights to each sensitivity.
+    \item Aggregate using a correlation structure specified by the regulator
+          to produce the total capital charge.
+\end{enumerate}
+
+The SA-CVA capital for a given risk class is computed in two components:
+\begin{align}
+    K_b &= \sqrt{\sum_k W_k^2 + \sum_{k}\sum_{l \neq k} \rho_{kl}\, W_k\, W_l}
+    && \text{(within-bucket)} \label{eq:sa-cva-bucket}\\
+    K &= \sqrt{\sum_b K_b^2 + \sum_b \sum_{c \neq b} \gamma_{bc}\, K_b\, K_c}
+    && \text{(across-bucket)} \label{eq:sa-cva-total}
+\end{align}
+where $W_k$ are the weighted sensitivities, $\rho_{kl}$ are within-bucket correlations,
+and $\gamma_{bc}$ are across-bucket correlations.
+
+\subsection{BA-CVA: Basic Approach}
+
+For banks that cannot compute CVA sensitivities, the Basic Approach (BA-CVA)
+provides a simplified formula.
+The reduced version is:
+\begin{equation}\label{eq:ba-cva}
+    K_{\text{BA-CVA}} = \rho \cdot \sum_c \text{SC}_c
+    + \sqrt{1 - \rho^2}\cdot\sqrt{\sum_c \text{SC}_c^2}
+\end{equation}
+where:
+\begin{itemize}
+    \item $\text{SC}_c$ is the \textbf{standalone capital} for counterparty $c$,
+          a function of the EAD, maturity, counterparty risk weight, and supervisory
+          discount factor.
+    \item $\rho = 50\%$ is the supervisory correlation, reflecting the systematic
+          component of CVA risk.
+    \item The first term captures systematic CVA risk (correlated spread movements);
+          the second captures idiosyncratic risk (counterparty-specific spread movements).
+\end{itemize}
+
+The standalone capital for each counterparty is:
+\[
+    \text{SC}_c = \frac{1}{\alpha}\cdot \text{RW}_c \cdot M_c \cdot \text{EAD}_c \cdot \text{DF}_c
+\]
+where $\text{RW}_c$ is the supervisory risk weight (based on credit rating and sector),
+$M_c$ is the effective maturity, $\text{EAD}_c$ is the exposure at default,
+$\text{DF}_c$ is a supervisory discount factor, and $\alpha = 1.4$.
+
+\begin{refbox}
+\begin{itemize}
+    \item Basel Committee on Banking Supervision (2020).
+          ``Minimum capital requirements for CVA risk.'' MAR50 in the consolidated framework.
+          Defines SA-CVA and BA-CVA in full detail.
+    \item For the interaction with FRTB market risk capital, see MAR10--MAR33.
+\end{itemize}
+\end{refbox}
+
+\subsection{Comparison of Approaches}
+
+\begin{center}
+\begin{tabular}{@{}p{3.5cm}p{4.8cm}p{4.8cm}@{}}
+\toprule
+& \textbf{SA-CVA} & \textbf{BA-CVA} \\
+\midrule
+\textbf{Complexity}     & High: requires CVA sensitivities to all risk factors
+                        & Low: uses EAD, maturity, and supervisory risk weights \\[4pt]
+\textbf{Risk sensitivity} & High: captures spread, IR, FX, equity risk
+                          & Moderate: captures spread risk only \\[4pt]
+\textbf{Hedging recognition} & Recognizes eligible CVA hedges (CDS, index CDS)
+                              & Does not recognize hedges \\[4pt]
+\textbf{Capital level}  & Generally lower (more risk-sensitive)
+                        & Generally higher (conservative) \\[4pt]
+\textbf{Prerequisites}  & Ability to compute CVA and its sensitivities
+                        & Minimal infrastructure \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyresult}
+The regulatory CVA framework has two important consequences for banks:
+\begin{enumerate}
+    \item \textbf{Capital cost}: the CVA capital charge is a significant component
+          of total trading book capital, often 10--30\% of the total market risk charge.
+          This cost is passed on to clients through wider spreads on OTC derivatives.
+    \item \textbf{Incentive to mitigate}: the framework incentivizes netting,
+          collateralization, and central clearing, all of which reduce the CVA charge.
+          Banks with SA-CVA approval also benefit from hedging recognition,
+          creating an incentive to actively hedge CVA risk with CDS.
+\end{enumerate}
+\end{keyresult}
+
+%% ============================================================================
+\section{References}
+\label{sec:references}
+%% ============================================================================
+
+The following texts provide the mathematical foundations and practical guidance
+for CVA and counterparty credit risk.
+
+\begin{enumerate}[label={[\arabic*]}, leftmargin=2cm]
+    \item \textbf{Gregory, J.}\ (2020).
+          \emph{The xVA Challenge: Counterparty Credit Risk, Funding, Collateral, Capital and Initial Margin.}
+          4th edition, Wiley.
+          The definitive practitioner reference covering CVA, DVA, FVA, KVA,
+          and all valuation adjustments.
+          Chapters 8--12 cover exposure simulation, CVA computation, and wrong-way risk in detail.
+
+    \item \textbf{Pykhtin, M.\ \& Zhu, S.H.}\ (2007).
+          ``A Guide to Modelling Counterparty Credit Risk.''
+          \emph{GARP Risk Review}, July/August 2007.
+          An accessible introduction to exposure modelling, netting,
+          and the computation of EE, PFE, and EPE\@.
+
+    \item \textbf{Brigo, D.\ \& Morini, M.}\ (2005).
+          ``Dangers of Bilateral Counterparty Risk: the fundamental impact
+          of closeout conventions.''
+          Working paper.
+          Explores the subtleties of bilateral CVA, DVA, and closeout
+          assumptions.
+
+    \item \textbf{Brigo, D., Morini, M.\ \& Pallavicini, A.}\ (2013).
+          \emph{Counterparty Credit Risk, Collateral and Funding:
+          With Pricing Cases for All Asset Classes.}
+          Wiley.
+          Rigorous mathematical treatment of CVA with applications
+          to interest rate, FX, credit, and equity derivatives.
+
+    \item \textbf{Basel Committee on Banking Supervision}\ (2020).
+          ``Minimum capital requirements for CVA risk (MAR50).''
+          \url{https://www.bis.org/basel_framework/}.
+          The official regulatory standard for SA-CVA and BA-CVA capital charges.
+
+    \item \textbf{Green, A.}\ (2015).
+          \emph{XVA: Credit, Funding and Capital Valuation Adjustments.}
+          Wiley.
+          Practical guide to implementing CVA and related adjustments,
+          with worked examples and code.
+
+    \item \textbf{Cesari, G., Aquilina, J., Charpillon, N., Filipovi\'c, Z.,
+          Lee, G.\ \& Manda, I.}\ (2009).
+          \emph{Modelling, Pricing, and Hedging Counterparty Credit Exposure.}
+          Springer.
+          Detailed technical treatment of exposure computation, simulation methods,
+          and computational challenges.
+
+    \item \textbf{Hull, J.\ \& White, A.}\ (2012).
+          ``CVA and Wrong-Way Risk.''
+          \emph{Financial Analysts Journal}, 68(5), 58--69.
+          Clear exposition of wrong-way risk modelling with practical examples.
+\end{enumerate}
+
+\begin{prereq}
+Before implementing CVA in code, ensure you are comfortable with:
+\begin{itemize}
+    \item Interest rate swap pricing and the mechanics of cash flow exchanges.
+    \item Monte Carlo simulation of interest rate and FX paths
+          (Hull--White, LMM, or similar models).
+    \item CDS pricing and the bootstrap of default probability curves.
+    \item Netting and collateral mechanics (ISDA Master Agreement, CSA).
+    \item Basic credit risk concepts: default probability, recovery rate, loss given default.
+\end{itemize}
+\end{prereq}
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Andr\'es Gonz\'alez Ortega --- Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}
