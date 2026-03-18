@@ -1,0 +1,23 @@
+data:
+  tickers: ["SPY", "QQQ", "IWM", "TLT", "GLD"]
+  start_date: "2010-01-01"
+  end_date: null
+  returns_type: "log"
+
+marginals:
+  garch_type: "garch"
+  garch_dist: "t"
+  pit_method: "empirical"
+
+copula:
+  families: ["gaussian", "t", "clayton", "gumbel", "frank"]
+  t_df_range: [2, 30]
+
+simulation:
+  n_samples: 10000
+
+portfolio:
+  weights: [0.2, 0.2, 0.2, 0.2, 0.2]
+  confidence_levels: [0.95, 0.99]
+
+random_seed: 42

@@ -1,0 +1,658 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+% indicator function via boldsymbol (no extra package needed)
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+
+\title{%
+    \textbf{Extreme Value Theory for Tail Risk} \\[0.5em]
+    \large Modeling the Worst Cases With Mathematical Rigor
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied, example-driven treatment of Extreme Value Theory (EVT) for financial risk.
+We start from the practical failure of standard models at extreme quantiles,
+develop the two main branches of EVT --- block maxima (GEV) and peaks over threshold (GPD) ---
+and derive the EVT-based VaR and ES formulas that allow principled extrapolation into the deep tail.
+A worked numerical example runs through the entire document: fitting GPD to S\&P~500 losses
+and computing risk measures at the 99.9\% level.
+We assume strong probability/statistics background; the focus is on \emph{why} EVT is the right tool for tail risk
+and \emph{how} to apply it.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{Why We Need EVT: The Extrapolation Problem}
+\label{sec:why-evt}
+%% ============================================================================
+
+\begin{example}[The 25-sigma day]\label{ex:25sigma}
+On October~19, 1987, the S\&P~500 fell 22.6\% in a single session.
+The annualized volatility at the time was roughly 20\%, giving a daily standard deviation of about
+$\sigma \approx 20\% / \sqrt{252} \approx 1.26\%$.
+Under a normal model, a 22.6\% loss is a $22.6 / 1.26 \approx 18$-sigma event
+(some estimates reach 25-sigma, depending on the estimation window).
+
+The probability of an 18-sigma event under the normal distribution is approximately $10^{-72}$.
+For reference, the universe has existed for about $4.3 \times 10^{17}$ seconds.
+Even if we observed one return per \emph{second} since the Big Bang,
+an 18-sigma event would still be impossible under normality.
+
+Yet it happened.
+\end{example}
+
+The problem is not that we made a small modeling error.
+The problem is structural: the normal distribution (and even the Student-$t$)
+was designed to describe the \emph{bulk} of the data --- the central 90--95\% of outcomes.
+When we use a model calibrated to the center to extrapolate into the 0.1\% tail,
+the errors are not small; they are \emph{catastrophic}.
+
+Consider the concrete stakes:
+\begin{itemize}
+    \item \textbf{Basel III/IV} requires banks to compute $\ES_{0.975}$, which depends on quantiles beyond 97.5\%.
+    \item \textbf{Internal risk limits} at many institutions use $\VaR_{0.999}$
+          (the once-in-four-years loss).
+    \item \textbf{Stress testing} (CCAR, DFAST) asks: what happens in a tail scenario
+          we may never have observed?
+\end{itemize}
+
+We need a theory that is \emph{designed} for extremes --- not borrowed from the center.
+That theory is Extreme Value Theory.
+
+\begin{keyresult}
+EVT does not assume a specific distribution for the full data.
+Instead, it provides a \textbf{universal limiting result}: regardless of the parent distribution,
+extreme values (under mild regularity conditions) converge to one of a small number of known distributions.
+This is the tail analogue of the Central Limit Theorem.
+\end{keyresult}
+
+%% ============================================================================
+\section{Block Maxima and the GEV Distribution}
+\label{sec:gev}
+%% ============================================================================
+
+\subsection{The Setup}
+
+Let $L_1, L_2, \ldots$ be a sequence of daily losses (i.i.d.\ or stationary with weak dependence).
+Partition them into blocks of length $n$ (e.g., $n = 21$ trading days $\approx$ one month).
+Let $M_n = \max(L_1, \ldots, L_n)$ be the block maximum.
+
+The fundamental question: as $n$ grows, what is the limiting distribution of $M_n$
+(after suitable normalization)?
+
+\subsection{The Fisher--Tippett--Gnedenko Theorem}
+
+\begin{theorem}[Fisher--Tippett--Gnedenko]\label{thm:ftg}
+If there exist normalizing constants $a_n > 0$ and $b_n \in \RV$ such that
+\[
+    \PV\!\left(\frac{M_n - b_n}{a_n} \leq x\right) \xrightarrow{d} H(x)
+\]
+for some non-degenerate distribution $H$, then $H$ must be one of the three extreme value types:
+\begin{enumerate}
+    \item \textbf{Fr\'echet} ($\xi > 0$): heavy-tailed. $H(x) = \exp(-x^{-1/\xi})$ for $x > 0$.
+    \item \textbf{Gumbel} ($\xi = 0$): light-tailed (exponential decay). $H(x) = \exp(-e^{-x})$.
+    \item \textbf{Weibull} ($\xi < 0$): bounded upper tail. $H(x) = \exp(-(-x)^{-1/\xi})$ for $x < 0$.
+\end{enumerate}
+\end{theorem}
+
+These three types unify into a single parametric family.
+
+\begin{definition}[Generalized Extreme Value Distribution]
+The \textbf{GEV} distribution has CDF:
+\[
+    H_{\xi, \mu, \sigma}(x) =
+    \exp\!\left\{-\left[1 + \xi\left(\frac{x - \mu}{\sigma}\right)\right]^{-1/\xi}\right\}
+\]
+for $1 + \xi(x - \mu)/\sigma > 0$, where $\mu \in \RV$ is the location,
+$\sigma > 0$ is the scale, and $\xi \in \RV$ is the \textbf{shape} (tail index).
+When $\xi = 0$, the expression is interpreted as the limit $\xi \to 0$, giving the Gumbel form.
+\end{definition}
+
+The parameter $\xi$ determines everything about the tail:
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ccll@{}}
+\toprule
+$\xi$ & \textbf{Type} & \textbf{Tail behavior} & \textbf{Typical domain} \\
+\midrule
+$> 0$ & Fr\'echet & Heavy tail (polynomial decay) & Equity returns, operational losses \\
+$= 0$ & Gumbel & Light tail (exponential decay) & Normal/lognormal data \\
+$< 0$ & Weibull & Finite upper endpoint & Bounded physical quantities \\
+\bottomrule
+\end{tabular}
+\caption{The three extreme value types, unified by the shape parameter $\xi$.}
+\end{table}
+
+\begin{keyresult}
+For financial return data, we almost always find $\hat\xi > 0$ (Fr\'echet domain).
+This confirms mathematically what practitioners know empirically:
+financial losses have heavier tails than the normal distribution,
+and the GEV framework quantifies exactly \emph{how} heavy.
+\end{keyresult}
+
+\subsection{Worked Example: Monthly Maxima of S\&P Losses}
+
+\begin{example}[Fitting GEV to block maxima]\label{ex:gev-fit}
+Take daily S\&P~500 losses (negative returns, sign-flipped) from 1990--2024 ($\approx$8{,}800 observations).
+Partition into monthly blocks ($n \approx 21$ days each), giving $\approx$420 block maxima.
+
+Fitting GEV by maximum likelihood yields (representative values):
+\[
+    \hat\xi \approx 0.28, \quad \hat\mu \approx 1.52\%, \quad \hat\sigma \approx 0.72\%
+\]
+
+\textbf{Interpretation}:
+\begin{itemize}
+    \item $\hat\xi = 0.28 > 0$: we are in the Fr\'echet domain. The tail is heavy.
+      For a Fr\'echet-type distribution with $\xi = 0.28$, only moments up to order $1/\xi \approx 3.6$ are finite
+      (the fourth moment does not exist).
+    \item $\hat\mu = 1.52\%$: the ``typical'' monthly maximum loss is about 1.5\%.
+    \item $\hat\sigma = 0.72\%$: the spread of monthly maxima around the location.
+\end{itemize}
+
+From the fitted GEV, the $T$-year return level (the loss exceeded once every $T$ years, on average) is:
+\[
+    x_T = \hat\mu - \frac{\hat\sigma}{\hat\xi}\left[1 - \left(-\ln\!\left(1 - \frac{1}{12T}\right)\right)^{-\hat\xi}\right]
+\]
+For $T = 100$ (the once-in-a-century monthly loss): $x_{100} \approx 12.8\%$.
+Under a normal model with the same mean and variance, the 100-year return level would be only $\approx 5.1\%$.
+The normal underestimates by a factor of 2.5.
+\end{example}
+
+\begin{warningbox}
+The block maxima approach is \textbf{wasteful}: from each block of 21 observations,
+we use only the single largest.
+If we have 8{,}800 daily losses but only 420 block maxima,
+we have discarded 95\% of the extreme information.
+This motivates the peaks-over-threshold approach.
+\end{warningbox}
+
+%% ============================================================================
+\section{Peaks Over Threshold and the GPD}
+\label{sec:gpd}
+%% ============================================================================
+
+\subsection{The Idea}
+
+Instead of taking the maximum within each block,
+we use \emph{all} observations that exceed a high threshold $u$.
+This retains far more data and leads to more efficient estimation.
+
+\begin{definition}[Excess distribution]
+For a loss $L$ with distribution function $F$ and a threshold $u < x_F$ (the right endpoint of $F$),
+the \textbf{excess distribution function} is:
+\[
+    F_u(y) = \PV(L - u \leq y \mid L > u), \quad y \geq 0
+\]
+This is the conditional distribution of the overshoot $L - u$, given that $L$ exceeds $u$.
+\end{definition}
+
+\subsection{The Pickands--Balkema--de Haan Theorem}
+
+\begin{theorem}[Pickands--Balkema--de Haan]\label{thm:pbdh}
+If $F$ is in the maximum domain of attraction of the GEV with shape parameter $\xi$,
+then there exists a positive function $\beta(u)$ such that
+\[
+    \sup_{0 \leq y < x_F - u} \left| F_u(y) - G_{\xi, \beta(u)}(y) \right| \to 0 \quad \text{as } u \to x_F
+\]
+where $G_{\xi, \beta}$ is the \textbf{Generalized Pareto Distribution} (GPD):
+\[
+    G_{\xi, \beta}(y) =
+    \begin{cases}
+        1 - \left(1 + \frac{\xi y}{\beta}\right)^{-1/\xi} & \text{if } \xi \neq 0 \\[6pt]
+        1 - \exp\!\left(-\frac{y}{\beta}\right) & \text{if } \xi = 0
+    \end{cases}
+\]
+with support $y \geq 0$ when $\xi \geq 0$, and $0 \leq y \leq -\beta/\xi$ when $\xi < 0$.
+\end{theorem}
+
+\begin{keyidea}
+The Pickands--Balkema--de Haan theorem is the \textbf{tail analogue of the CLT}.
+Just as sums converge to the normal regardless of the parent distribution,
+exceedances over a high threshold converge to the GPD.
+The only free parameters are the shape $\xi$ (inherited from the GEV) and the scale $\beta$.
+\end{keyidea}
+
+\subsection{Connection Between GEV and GPD}
+
+The two branches of EVT are not independent.
+If block maxima follow a $\text{GEV}(\xi, \mu, \sigma)$, then exceedances above a high threshold
+follow a $\text{GPD}(\xi, \beta)$ \textbf{with the same shape parameter} $\xi$.
+The scale parameters are related by $\beta = \sigma + \xi(u - \mu)$.
+
+This means: fitting GEV to block maxima and fitting GPD to exceedances
+should give consistent estimates of $\xi$.
+If they disagree substantially, something is wrong (usually the threshold choice).
+
+\subsection{Worked Example: Losses Above the 95th Percentile}
+
+\begin{example}[Fitting GPD to exceedances]\label{ex:gpd-fit}
+Continuing with S\&P~500 daily losses (1990--2024, 8{,}800 observations).
+Set the threshold $u$ at the 95th percentile of losses: $u \approx 1.65\%$.
+This gives $N_u \approx 440$ exceedances (the 5\% largest losses).
+
+Fitting GPD by maximum likelihood to the excesses $\{L_i - u : L_i > u\}$:
+\[
+    \hat\xi \approx 0.25, \quad \hat\beta \approx 0.58\%
+\]
+
+\textbf{Checks}:
+\begin{itemize}
+    \item $\hat\xi = 0.25$, consistent with the GEV estimate of $\hat\xi = 0.28$ from Example~\ref{ex:gev-fit}. Good.
+    \item The GPD fit uses 440 exceedances vs.\ 420 block maxima, giving tighter confidence intervals.
+\end{itemize}
+
+The fitted tail distribution for $x > u$ is:
+\[
+    \bar{F}(x) = \PV(L > x) = \frac{N_u}{n}\left(1 + \hat\xi \cdot \frac{x - u}{\hat\beta}\right)^{-1/\hat\xi}
+\]
+where $N_u / n = 440 / 8800 = 0.05$ is the empirical exceedance probability.
+\end{example}
+
+%% ============================================================================
+\section{Threshold Selection}
+\label{sec:threshold}
+%% ============================================================================
+
+The GPD result is asymptotic: it holds as $u \to x_F$.
+In practice, we need a finite threshold that is ``high enough'' for the GPD approximation to be reasonable,
+yet ``low enough'' to retain sufficient exceedances for estimation.
+This is the classic bias-variance tradeoff of EVT.
+
+\subsection{Mean Residual Life Plot}
+
+\begin{keyidea}
+If $L - u \mid L > u \sim \text{GPD}(\xi, \beta)$, then the \textbf{mean excess function}
+\[
+    e(u) = \EV[L - u \mid L > u] = \frac{\beta}{1 - \xi}
+\]
+is \textbf{linear in $u$} for thresholds above the point where the GPD approximation kicks in.
+The modified scale parameter satisfies $\beta(u) = \beta_0 + \xi u$,
+so $e(u) = (\beta_0 + \xi u) / (1 - \xi)$, which is indeed linear with slope $\xi / (1 - \xi)$.
+
+\medskip
+
+\textbf{Mean Residual Life (MRL) plot}: plot the empirical mean excess
+\[
+    \hat{e}(u) = \frac{1}{N_u}\sum_{i: L_i > u}(L_i - u)
+\]
+against $u$, with pointwise confidence bands.
+Look for the threshold $u_0$ above which the plot becomes approximately linear.
+Choose $u \geq u_0$.
+\end{keyidea}
+
+\textbf{What the plot looks like in practice (S\&P losses)}:
+for small $u$, the MRL plot curves upward (the bulk distribution is not GPD).
+Above approximately the 90th--95th percentile, the plot straightens into a roughly linear trend
+with positive slope (confirming $\xi > 0$).
+Confidence bands widen rapidly for very high thresholds (few exceedances).
+
+\subsection{Parameter Stability Plot}
+
+A complementary diagnostic:
+
+\begin{enumerate}
+    \item For a grid of thresholds $u_1 < u_2 < \cdots < u_K$, fit GPD to exceedances above each $u_k$.
+    \item Plot $\hat\xi(u_k)$ vs.\ $u_k$ with confidence intervals.
+    \item Also plot the \textbf{modified scale} $\hat\beta^*(u_k) = \hat\beta(u_k) - \hat\xi(u_k) \cdot u_k$ vs.\ $u_k$.
+\end{enumerate}
+
+If the GPD model is correct above some threshold $u_0$,
+both $\hat\xi$ and $\hat\beta^*$ should be \emph{stable} (approximately constant) for $u \geq u_0$.
+Instability signals that the threshold is too low.
+
+\subsection{The Hill Estimator}
+
+For distributions in the Fr\'echet domain ($\xi > 0$), the Hill estimator provides a direct estimate
+of the tail index from the $k$ largest order statistics $L_{(1)} \geq L_{(2)} \geq \cdots \geq L_{(k)}$:
+\[
+    \hat\xi_{\text{Hill}}(k) = \frac{1}{k}\sum_{i=1}^{k} \ln L_{(i)} - \ln L_{(k+1)}
+\]
+
+\textbf{Hill plot}: plot $\hat\xi_{\text{Hill}}(k)$ vs.\ $k$.
+Look for a region where the estimate is stable.
+This is the analogue of the parameter stability plot but specific to heavy-tailed data.
+
+\begin{warningbox}
+All threshold selection methods involve visual judgment --- there is no fully automatic procedure
+that works reliably in all cases.
+The recommended practice is to use \emph{all three} diagnostics (MRL plot, parameter stability, Hill plot)
+and check for consistency.
+If the three methods point to different thresholds, the problem may have structure
+(e.g., mixture of two tail regimes) that simple GPD cannot capture.
+\end{warningbox}
+
+%% ============================================================================
+\section{EVT-Based Risk Measures}
+\label{sec:evt-risk}
+%% ============================================================================
+
+With a fitted GPD tail, we can compute risk measures at arbitrarily high confidence levels ---
+even at quantiles that have no historical observations.
+
+\subsection{EVT VaR}
+
+From the tail estimator in Example~\ref{ex:gpd-fit},
+for a confidence level $\alpha$ exceeding the threshold probability $1 - N_u/n$:
+
+\begin{keyidea}
+\textbf{EVT-based Value-at-Risk:}
+\[
+    \VaR_\alpha = u + \frac{\hat\beta}{\hat\xi}
+    \left[\left(\frac{n}{N_u}(1-\alpha)\right)^{-\hat\xi} - 1\right]
+\]
+This inverts the GPD tail estimator at probability level $\alpha$.
+\end{keyidea}
+
+\subsection{EVT Expected Shortfall}
+
+By integrating the tail beyond $\VaR_\alpha$:
+
+\begin{keyidea}
+\textbf{EVT-based Expected Shortfall} (valid for $\hat\xi < 1$):
+\[
+    \ES_\alpha = \frac{\VaR_\alpha}{1 - \hat\xi} + \frac{\hat\beta - \hat\xi \, u}{1 - \hat\xi}
+\]
+Equivalently:
+\[
+    \ES_\alpha = \frac{\VaR_\alpha + \hat\beta - \hat\xi \, u}{1 - \hat\xi}
+\]
+The condition $\hat\xi < 1$ ensures the mean of the GPD exists.
+For financial data, $\hat\xi \approx 0.2$--$0.4$, so this is always satisfied.
+\end{keyidea}
+
+\subsection{Worked Example: 99.9\% Risk Measures}
+
+\begin{example}[EVT vs.\ normal at 99.9\%]\label{ex:evt-risk}
+Using the GPD fit from Example~\ref{ex:gpd-fit}:
+$u = 1.65\%$, $\hat\xi = 0.25$, $\hat\beta = 0.58\%$, $N_u = 440$, $n = 8800$.
+
+\medskip
+\textbf{Step 1: EVT VaR at $\alpha = 0.999$.}
+\[
+    \VaR_{0.999} = 1.65 + \frac{0.58}{0.25}
+    \left[\left(\frac{8800}{440} \times 0.001\right)^{-0.25} - 1\right]
+\]
+\[
+    = 1.65 + 2.32 \left[(0.02)^{-0.25} - 1\right]
+    = 1.65 + 2.32 \left[2.659 - 1\right]
+    = 1.65 + 2.32 \times 1.659
+\]
+\[
+    \VaR_{0.999}^{\text{EVT}} \approx 5.50\%
+\]
+
+\textbf{Step 2: EVT ES at $\alpha = 0.999$.}
+\[
+    \ES_{0.999} = \frac{5.50 + 0.58 - 0.25 \times 1.65}{1 - 0.25}
+    = \frac{5.50 + 0.58 - 0.4125}{0.75}
+    = \frac{5.6675}{0.75} \approx 7.56\%
+\]
+
+\textbf{Step 3: Compare to normal.}
+The sample mean and standard deviation of daily losses are approximately
+$\hat\mu_L \approx 0.04\%$ and $\hat\sigma_L \approx 1.15\%$.
+Under normality:
+\[
+    \VaR_{0.999}^{\text{Normal}} = 0.04 + 1.15 \times \Phi^{-1}(0.999)
+    = 0.04 + 1.15 \times 3.090 = 3.59\%
+\]
+\[
+    \ES_{0.999}^{\text{Normal}} = 0.04 + 1.15 \times \frac{\phi(3.090)}{0.001} \approx 4.07\%
+\]
+
+\medskip
+
+\begin{center}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Risk measure} & \textbf{Normal model} & \textbf{EVT (GPD)} \\
+\midrule
+$\VaR_{0.999}$ & 3.59\% & 5.50\% \\
+$\ES_{0.999}$  & 4.07\% & 7.56\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\medskip
+
+The normal model underestimates $\VaR_{0.999}$ by 35\% and $\ES_{0.999}$ by 46\%.
+For a \$100 million portfolio, this is the difference between reserving \$3.6M and \$5.5M against tail losses.
+The normal model is not slightly wrong --- it is \textbf{dangerously wrong} in the deep tail.
+\end{example}
+
+\begin{keyresult}
+The farther into the tail you go, the worse the normal approximation gets.
+At 95\%, the normal and EVT estimates are similar.
+At 99\%, the gap opens.
+At 99.9\%, the normal can underestimate by 30--50\%.
+This is because the normal tail decays as $\exp(-x^2/2)$ (Gaussian),
+while the heavy-tailed GPD decays as $x^{-1/\xi}$ (polynomial).
+The polynomial wins at large $x$.
+\end{keyresult}
+
+%% ============================================================================
+\section{GARCH + EVT: The McNeil--Frey Approach}
+\label{sec:garch-evt}
+%% ============================================================================
+
+The EVT analysis above assumed i.i.d.\ losses.
+But financial returns exhibit \emph{volatility clustering}:
+periods of high volatility persist for weeks or months (see Project~04).
+Applying EVT directly to raw returns conflates two effects:
+\begin{enumerate}
+    \item The \emph{volatility dynamics} (how risk changes over time).
+    \item The \emph{tail behavior} of the innovation distribution (how extreme the shocks are).
+\end{enumerate}
+
+McNeil \& Frey (2000) proposed a clean two-step procedure.
+
+\subsection{The Method}
+
+\begin{keyidea}
+\textbf{Step 1: GARCH filtering.}
+Fit a GARCH(1,1) model (or GJR-GARCH, EGARCH) to the return series:
+\[
+    r_t = \hat\mu_t + \hat\sigma_t z_t
+\]
+Extract the standardized residuals $\hat{z}_t = (r_t - \hat\mu_t) / \hat\sigma_t$.
+These should be approximately i.i.d.\ (check with Ljung-Box test on $\hat{z}_t$ and $\hat{z}_t^2$).
+
+\medskip
+\textbf{Step 2: EVT on residuals.}
+Apply the GPD to the tails of $\hat{z}_t$ (after sign-flipping for the loss tail).
+This gives tail parameters $(\hat\xi_z, \hat\beta_z)$ for the \emph{innovation} distribution.
+
+\medskip
+\textbf{Step 3: Conditional risk measures.}
+The one-step-ahead conditional VaR is:
+\[
+    \VaR_{t+1, \alpha} = \hat\mu_{t+1} + \hat\sigma_{t+1} \cdot \VaR_\alpha^{z}
+\]
+where $\VaR_\alpha^{z}$ is the EVT-based VaR of the standardized residuals and
+$\hat\sigma_{t+1}$ is the GARCH forecast of tomorrow's volatility.
+Analogously for ES:
+\[
+    \ES_{t+1, \alpha} = \hat\mu_{t+1} + \hat\sigma_{t+1} \cdot \ES_\alpha^{z}
+\]
+\end{keyidea}
+
+\subsection{Why This Works}
+
+The key insight is \textbf{separation of concerns}:
+\begin{itemize}
+    \item GARCH captures the \emph{time-varying volatility} (the conditional scale).
+    \item EVT captures the \emph{tail shape} of the innovations (the unconditional distribution of shocks, once volatility is removed).
+\end{itemize}
+
+Because the standardized residuals are (approximately) i.i.d.,
+the EVT asymptotic theory applies cleanly.
+Applying EVT to raw returns, which are serially dependent through volatility clustering,
+violates the i.i.d.\ assumption and can lead to biased tail estimates.
+
+\begin{warningbox}
+The quality of the GARCH filter matters.
+If the GARCH model is misspecified (e.g., using GARCH(1,1) when the data has strong leverage effects),
+the standardized residuals will still exhibit dependence,
+and the subsequent EVT step inherits that misspecification.
+Always check residual diagnostics before applying EVT.
+\end{warningbox}
+
+\subsection{Connection to the Project Pipeline}
+
+In the risk-analyst project:
+\begin{itemize}
+    \item \textbf{Project~04} (Volatility Modeling) provides the GARCH filter:
+          fitting GARCH/GJR-GARCH/EGARCH and extracting $\hat\sigma_t$ and $\hat{z}_t$.
+    \item \textbf{Project~05} (this project) applies EVT to the filtered residuals.
+    \item \textbf{Project~06} (Copula Dependency) uses the same GARCH-filtered residuals
+          as input to copula fitting (after probability integral transform).
+\end{itemize}
+
+The GARCH + EVT approach produces \emph{conditional} risk measures that adapt to the current
+volatility regime while correctly modeling the extreme tail.
+This is the state of the art for univariate tail risk estimation.
+
+\begin{refbox}
+\begin{itemize}
+    \item McNeil, A.J.\ \& Frey, R.\ (2000). ``Estimation of tail-related risk measures for
+          heteroscedastic financial time series: an extreme value approach.''
+          \emph{Journal of Empirical Finance}, 7(3--4), 271--300.
+          The foundational paper for GARCH + EVT.
+    \item McNeil, A.J., Frey, R.\ \& Embrechts, P.\ (2015).
+          \emph{Quantitative Risk Management: Concepts, Techniques and Tools}. 2nd ed., Ch.~7.
+          Textbook treatment.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{References}
+\label{sec:references}
+%% ============================================================================
+
+The following texts provide the mathematical foundations and practical guidance for EVT in finance.
+
+\begin{enumerate}[label={[\arabic*]}, leftmargin=2cm]
+    \item \textbf{de Haan, L.\ \& Ferreira, A.}\ (2006).
+          \emph{Extreme Value Theory: An Introduction}.
+          Springer.
+          The rigorous mathematical treatment.
+          Chapters 1--3 cover the GEV and GPD theory;
+          Chapter~6 addresses statistical estimation.
+
+    \item \textbf{McNeil, A.J.\ \& Frey, R.}\ (2000).
+          ``Estimation of tail-related risk measures for heteroscedastic financial time series:
+          an extreme value approach.''
+          \emph{Journal of Empirical Finance}, 7(3--4), 271--300.
+          The GARCH + EVT methodology.
+
+    \item \textbf{Embrechts, P., Kl\"uppelberg, C.\ \& Mikosch, T.}\ (1997).
+          \emph{Modelling Extremal Events for Insurance and Finance}.
+          Springer.
+          The classic reference for EVT in risk management;
+          strong on both theory and applications.
+
+    \item \textbf{Coles, S.}\ (2001).
+          \emph{An Introduction to Statistical Modeling of Extreme Values}.
+          Springer.
+          Accessible, applied treatment with many worked examples.
+          Excellent for threshold selection diagnostics.
+
+    \item \textbf{McNeil, A.J., Frey, R.\ \& Embrechts, P.}\ (2015).
+          \emph{Quantitative Risk Management: Concepts, Techniques and Tools}. 2nd ed.
+          Princeton University Press.
+          Chapters 5 and 7 cover EVT and its integration with GARCH.
+
+    \item \textbf{Danielsson, J.}\ (2011).
+          \emph{Financial Risk Forecasting}.
+          Wiley.
+          Chapter~9 provides a practitioner-oriented EVT guide with R code.
+\end{enumerate}
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Andr\'es Gonz\'alez Ortega --- Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}

@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 4 Projects $\cdot$ 67 Tests $\cdot$ 8{,}000+ Lines of Production Code}
+    {\normalsize\sffamily 6 Projects $\cdot$ 91 Tests $\cdot$ 10{,}000+ Lines of Production Code}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -262,6 +262,105 @@ Risk managers can use this as an early warning system: when crisis probability e
 \vspace{1em}
 
 %% ============================================================================
+\section*{Project 05 --- Extreme Value Theory for Tail Risk}
+%% ============================================================================
+
+\begin{problembox}
+Standard risk models (normal, Student-$t$) are fitted to the \emph{bulk} of the return distribution.
+But regulators demand risk estimates at the 99.9\% level --- the 1-in-1{,}000-day event.
+At these extremes, normal assumptions can underestimate losses by 90\% or more.
+We need a theory that is \emph{designed} for the tails.
+\end{problembox}
+
+\begin{answerbox}
+We apply Extreme Value Theory: the Pickands--Balkema--de Haan theorem says that exceedances above a high threshold follow a Generalized Pareto Distribution (GPD), regardless of the original distribution.
+We fit GPD to tail losses, compute EVT-based VaR and ES at extreme quantiles (99\%, 99.5\%, 99.9\%), and compare against normal and $t$-distribution estimates.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p05_evt_vs_normal.png}
+    \caption{VaR comparison at extreme quantiles. The normal distribution (blue) dramatically underestimates tail risk at 99.9\%, while EVT (red) captures the true heavy-tailed behavior.}
+\end{figure}
+
+\begin{interpbox}
+At 95\%, all three methods give similar VaR estimates --- the bulk of the distribution is well-behaved.
+But at \textbf{99.9\%}, the gap becomes enormous: the normal distribution underestimates VaR by up to 97\% compared to EVT.
+
+This is the \textbf{extrapolation problem}: the normal distribution's exponentially decaying tails assign near-zero probability to extreme events.
+EVT's power-law tails (controlled by the shape parameter $\xi > 0$) correctly capture the heavy-tailed nature of financial losses.
+
+\textbf{Practical impact}: a bank using normal VaR at 99.9\% would hold far too little capital to cover extreme losses.
+This is exactly why Basel III/IV mandates stress testing and why EVT is standard practice at major institutions.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p05_gpd_tail.png}
+    \caption{Left: GPD fit to exceedances above the 95th percentile. Right: QQ plot confirming the GPD captures the tail accurately ($\xi = 0.33$, confirming heavy tails).}
+\end{figure}
+
+\begin{interpbox}
+\textbf{Left panel}: The histogram shows the distribution of losses that exceeded the 95th percentile threshold.
+The red curve is the fitted GPD --- it matches the empirical tail well, especially in the far right where extreme losses live.
+
+\textbf{Right panel}: The QQ plot compares theoretical GPD quantiles against observed quantiles.
+Points falling on the diagonal line indicate a good fit.
+The shape parameter $\xi = 0.33 > 0$ confirms \textbf{Frechet-type} (heavy) tails --- the same class as Pareto distributions, which is typical for equity returns.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
+\section*{Project 06 --- Copula Dependency Modeling}
+%% ============================================================================
+
+\begin{problembox}
+Pearson correlation measures \emph{linear} dependence and assumes joint normality.
+During the 2008 crisis, assets that appeared weakly correlated ($\rho \approx 0.3$) suddenly moved together ($\rho > 0.8$).
+The Gaussian copula, which assumes zero probability of joint extreme moves, was at the heart of the CDO mispricing catastrophe.
+We need a richer model of dependence that captures \emph{how risks move together in the tails}.
+\end{problembox}
+
+\begin{answerbox}
+We separate marginal distributions from dependence structure using copulas (Sklar's theorem).
+After filtering each asset through GARCH and applying a probability integral transform, we fit five copula families (Gaussian, Student-$t$, Clayton, Gumbel, Frank) and compare their tail dependence properties and portfolio VaR implications.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p06_copula_scatter.png}
+    \caption{Samples from three copulas with the same correlation ($\rho = 0.6$). The Gaussian copula (left) shows no concentration in corners. The Student-$t$ (center) and Clayton (right) show clustering in the tails.}
+\end{figure}
+
+\begin{interpbox}
+All three scatter plots have the \textbf{same correlation} ($\rho = 0.6$), but their joint tail behavior is completely different:
+
+\textbf{Gaussian} (left): Points spread uniformly --- no clustering in the corners. This means the Gaussian copula assigns near-zero probability to \emph{both assets crashing simultaneously}. This was exactly the flaw in pre-2008 CDO models.
+
+\textbf{Student-$t$} (center): Notice the concentration of points in \emph{both} the lower-left and upper-right corners. This is \textbf{symmetric tail dependence} --- extremes tend to occur together, whether crashes or rallies.
+
+\textbf{Clayton} (right): Heavy concentration in the \emph{lower-left corner only}. This is \textbf{lower tail dependence} --- assets crash together, but don't necessarily rally together. This asymmetry matches empirical behavior of equity markets.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p06_var_by_copula.png}
+    \caption{Portfolio VaR under different dependence assumptions. The choice of copula materially affects risk estimates, especially at higher confidence levels.}
+\end{figure}
+
+\begin{interpbox}
+The bars show that \textbf{the choice of dependence model matters for risk}.
+At 95\%, differences are modest.
+At 99\%, they become material --- the copula that captures tail dependence (Student-$t$, Clayton) produces higher VaR than the one that doesn't (Gaussian, Normal).
+
+\textbf{Key takeaway}: two portfolios with identical correlations can have very different tail risk depending on their copula structure.
+A risk manager using only correlation (i.e., implicitly using a Gaussian copula) will systematically underestimate the probability of simultaneous extreme losses across assets.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -274,8 +373,10 @@ Risk managers can use this as an early warning system: when crisis probability e
 02 & Monte Carlo Engine           & 17 & Correlated simulation with variance reduction \\
 03 & Credit Scoring with ML       & 14 & PD model with AUC = 0.86, SHAP explainability \\
 04 & Volatility Modeling           & 14 & GARCH family + regime-switching \\
+05 & EVT for Tail Risk            & 12 & GEV/GPD fitting, threshold selection, return levels \\
+06 & Copula Dependency            & 12 & 5 copula families, PIT, joint simulation \\
 \addlinespace
-   & \textbf{Total}               & \textbf{67} & \textbf{8{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{91} & \textbf{10{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

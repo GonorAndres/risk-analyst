@@ -1,0 +1,708 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+% indicator function via boldsymbol (no extra package needed)
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+
+\title{%
+    \textbf{Copula Dependency Modeling} \\[0.5em]
+    \large Beyond Correlation: Modeling How Risks Move Together
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied treatment of copula theory for portfolio risk modeling.
+We begin with the concrete failure of Pearson correlation during the 2008 crisis,
+then develop the mathematical framework: Sklar's theorem, elliptical copulas, Archimedean copulas,
+and vine constructions for high dimensions.
+A complete workflow --- GARCH filtering, probability integral transform, copula fitting, and joint simulation ---
+is described and applied to a three-asset portfolio.
+The main result: choosing the wrong copula (Gaussian) underestimates portfolio tail risk
+by 20--40\% compared to copulas that capture joint crashes.
+We assume strong probability/statistics background and focus on the financial risk application.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{Why Correlation Fails}
+\label{sec:why-copulas}
+%% ============================================================================
+
+\begin{example}[Correlation breakdown in 2008]\label{ex:corr-breakdown}
+From 2005 to mid-2007, the rolling 252-day correlation between US equity indices
+and mortgage-backed securities (MBS) was approximately $\rho \approx 0.3$.
+Portfolio managers used this number to ``diversify'':
+if equities fall, MBS won't fall as much, and vice versa.
+
+During the 2008 financial crisis, the correlation spiked above $\rho \approx 0.8$.
+The ``diversification'' vanished precisely when it was needed most.
+A portfolio optimized under $\rho = 0.3$ suffered losses far larger than any
+model based on constant correlation had predicted.
+\end{example}
+
+This is not an isolated anecdote.
+Correlation fails as a dependence measure for at least three fundamental reasons:
+
+\begin{enumerate}
+    \item \textbf{Linearity.}
+    Pearson correlation measures only \emph{linear} association.
+    If $X \sim N(0,1)$ and $Y = X^2$, then $X$ and $Y$ are perfectly dependent ($Y$ is a deterministic function of $X$),
+    yet $\rho(X, Y) = 0$.
+    Correlation misses all non-linear dependence.
+
+    \item \textbf{Marginal dependence.}
+    Correlation depends on the marginal distributions, not just the dependence structure.
+    The same copula (same dependence) paired with different marginals can produce different correlations.
+    This means correlation is not an intrinsic property of dependence.
+
+    \item \textbf{Tail blindness.}
+    Two joint distributions can have identical correlation $\rho$ but radically different
+    probabilities of joint extreme events.
+    A Gaussian copula and a Student-$t$ copula with the same $\rho$ agree in the center
+    but diverge dramatically in the tails.
+\end{enumerate}
+
+\begin{example}[The Gaussian copula catastrophe]\label{ex:gaussian-copula}
+In the early 2000s, the Gaussian copula (popularized by David Li's 2000 paper)
+became the market standard for pricing Collateralized Debt Obligations (CDOs).
+The model assumed that joint defaults were governed by a multivariate normal dependence structure.
+
+The fatal flaw: the Gaussian copula has \emph{zero tail dependence}.
+It assigns negligible probability to many assets defaulting simultaneously.
+When the housing market collapsed in 2007--2008, widespread simultaneous defaults occurred ---
+events the Gaussian copula model deemed essentially impossible.
+Senior CDO tranches rated AAA suffered catastrophic losses.
+
+This was not a failure of copula theory.
+It was a failure of choosing the \emph{wrong} copula: one that structurally cannot capture joint extremes.
+\end{example}
+
+\begin{warningbox}
+Correlation is a single number.
+Dependence is a \emph{function} --- a full description of how the joint distribution relates to the marginals.
+Compressing it into one number discards critical information,
+especially about the tails where risk management matters most.
+\end{warningbox}
+
+%% ============================================================================
+\section{Sklar's Theorem: The Fundamental Decomposition}
+\label{sec:sklar}
+%% ============================================================================
+
+\begin{definition}[Copula]
+A \textbf{$d$-dimensional copula} is a function $C : [0,1]^d \to [0,1]$ such that:
+\begin{enumerate}
+    \item $C$ is grounded: $C(u_1, \ldots, u_d) = 0$ if any $u_i = 0$.
+    \item $C$ has uniform marginals: $C(1, \ldots, 1, u_i, 1, \ldots, 1) = u_i$ for all $i$.
+    \item $C$ is $d$-increasing (the copula analogue of a CDF being non-decreasing).
+\end{enumerate}
+\end{definition}
+
+\begin{theorem}[Sklar, 1959]\label{thm:sklar}
+Let $F$ be a $d$-dimensional joint distribution function with marginals $F_1, \ldots, F_d$.
+Then there exists a copula $C$ such that for all $(x_1, \ldots, x_d) \in \overline{\RV}^d$:
+\[
+    F(x_1, \ldots, x_d) = C\bigl(F_1(x_1), \ldots, F_d(x_d)\bigr)
+\]
+If the marginals $F_1, \ldots, F_d$ are continuous, then $C$ is \textbf{unique}.
+
+Conversely, if $C$ is a copula and $F_1, \ldots, F_d$ are univariate distribution functions,
+then the function $F$ defined above is a valid joint distribution with marginals $F_1, \ldots, F_d$.
+\end{theorem}
+
+\begin{keyresult}
+Sklar's theorem provides a \textbf{complete separation} of two modeling tasks:
+\begin{enumerate}
+    \item \textbf{Marginals}: model each risk factor's distribution individually
+          (e.g., GARCH with skewed-$t$ innovations, or GARCH + EVT from Project~05).
+    \item \textbf{Dependence}: model how the risk factors move together by choosing a copula $C$.
+\end{enumerate}
+The two choices are \textbf{independent}.
+You can pair any set of marginals with any copula.
+This modularity is the main practical advantage of the copula approach.
+\end{keyresult}
+
+The copula itself can be extracted from a known joint distribution.
+If $F$ has continuous marginals, then:
+\[
+    C(u_1, \ldots, u_d) = F\bigl(F_1^{-1}(u_1), \ldots, F_d^{-1}(u_d)\bigr)
+\]
+This is how the Gaussian and $t$-copulas are derived: extract the copula from the multivariate
+normal or multivariate $t$ distribution.
+
+%% ============================================================================
+\section{Elliptical Copulas}
+\label{sec:elliptical}
+%% ============================================================================
+
+Elliptical copulas are derived from elliptical distributions (multivariate normal, multivariate $t$, etc.).
+They inherit the symmetry of the parent distribution: the dependence structure
+is the same in all directions.
+
+\subsection{Gaussian Copula}
+
+\begin{definition}[Gaussian copula]
+The $d$-dimensional Gaussian copula with correlation matrix $\bm{R}$ is:
+\[
+    C_{\bm{R}}^{\text{Ga}}(u_1, \ldots, u_d)
+    = \Phi_{\bm{R}}\bigl(\Phi^{-1}(u_1), \ldots, \Phi^{-1}(u_d)\bigr)
+\]
+where $\Phi$ is the standard normal CDF and $\Phi_{\bm{R}}$ is the CDF of the
+$d$-dimensional normal with mean $\bm{0}$ and correlation matrix $\bm{R}$.
+\end{definition}
+
+The Gaussian copula is parameterized by the $d(d-1)/2$ off-diagonal entries of $\bm{R}$.
+It captures the \emph{rank} dependence structure of the multivariate normal,
+without imposing normal marginals.
+
+\begin{proposition}[Tail dependence of Gaussian copula]
+For any $\rho \in (-1, 1)$, the Gaussian copula has
+\[
+    \lambda_L = \lambda_U = 0
+\]
+The Gaussian copula is \textbf{asymptotically independent} in the tails:
+the probability of joint extreme events vanishes faster than the probability of individual extremes.
+\end{proposition}
+
+This is the mathematical reason the Gaussian copula failed for CDO pricing:
+it structurally cannot generate the joint extreme events that matter for risk.
+
+\subsection{Student-$t$ Copula}
+
+\begin{definition}[Student-$t$ copula]
+The $d$-dimensional $t$-copula with correlation matrix $\bm{R}$ and $\nu$ degrees of freedom is:
+\[
+    C_{\bm{R}, \nu}^{t}(u_1, \ldots, u_d)
+    = t_{\bm{R}, \nu}\bigl(t_\nu^{-1}(u_1), \ldots, t_\nu^{-1}(u_d)\bigr)
+\]
+where $t_\nu$ is the univariate $t$-CDF and $t_{\bm{R}, \nu}$ is the CDF of the
+$d$-dimensional $t$-distribution with correlation $\bm{R}$ and $\nu$ degrees of freedom.
+\end{definition}
+
+The $t$-copula has one extra parameter compared to the Gaussian: the degrees of freedom $\nu$.
+As $\nu \to \infty$, it converges to the Gaussian copula.
+
+\begin{proposition}[Tail dependence of $t$-copula]
+For the bivariate $t$-copula with correlation $\rho$ and $\nu$ degrees of freedom:
+\[
+    \lambda_L = \lambda_U = 2 \, t_{\nu+1}\!\left(-\sqrt{\nu + 1}\sqrt{\frac{1-\rho}{1+\rho}}\right)
+\]
+where $t_{\nu+1}$ is the CDF of the univariate $t$-distribution with $\nu + 1$ degrees of freedom.
+\end{proposition}
+
+\begin{example}[Tail dependence values]
+For $\rho = 0.5$:
+\begin{itemize}
+    \item $\nu = 4$: $\lambda_L = \lambda_U \approx 0.18$ (substantial tail dependence).
+    \item $\nu = 10$: $\lambda_L = \lambda_U \approx 0.07$ (moderate).
+    \item $\nu = 30$: $\lambda_L = \lambda_U \approx 0.01$ (weak, approaching Gaussian).
+    \item $\nu \to \infty$: $\lambda_L = \lambda_U = 0$ (Gaussian limit).
+\end{itemize}
+Lower $\nu$ means heavier joint tails.
+For equity data, typical estimates are $\nu \approx 5$--$10$.
+\end{example}
+
+\subsection{Comparison}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Property} & \textbf{Gaussian} & \textbf{Student-$t$} \\
+\midrule
+Parameters & $\bm{R}$ ($d(d-1)/2$ entries) & $\bm{R}$ + $\nu$ \\
+Tail dependence & $\lambda_L = \lambda_U = 0$ & $\lambda_L = \lambda_U > 0$ \\
+Symmetry & Symmetric & Symmetric \\
+Joint extremes & Cannot capture & Captures \\
+Nests Gaussian? & --- & Yes ($\nu \to \infty$) \\
+Typical use & Benchmark / comparison & Default choice for multi-asset risk \\
+\bottomrule
+\end{tabular}
+\caption{Gaussian vs.\ Student-$t$ copula.
+The $t$-copula is strictly more flexible and captures the joint tail behavior
+that matters for risk.}
+\end{table}
+
+\begin{keyresult}
+The tail dependence coefficient $\lambda$ has a direct risk interpretation:
+$\lambda_L = \PV(U_2 \leq \epsilon \mid U_1 \leq \epsilon)$ as $\epsilon \to 0$,
+where $U_1, U_2$ are the copula-uniform variables.
+In portfolio terms: \emph{given that asset 1 has an extreme loss,
+what is the probability that asset 2 simultaneously has an extreme loss?}
+The Gaussian copula answers: zero.
+The $t$-copula gives a realistic, positive number.
+\end{keyresult}
+
+%% ============================================================================
+\section{Archimedean Copulas}
+\label{sec:archimedean}
+%% ============================================================================
+
+Archimedean copulas offer a different construction from elliptical copulas.
+They are built from a \emph{generator function} and can capture asymmetric tail dependence
+(e.g., lower tail dependence without upper, or vice versa).
+
+\subsection{The Generator Construction}
+
+\begin{definition}[Archimedean copula]
+Let $\varphi : [0,1] \to [0, \infty]$ be a continuous, strictly decreasing, convex function
+with $\varphi(1) = 0$ (the \textbf{generator}).
+Let $\varphi^{-1}$ be its inverse (the \textbf{pseudo-inverse} if $\varphi(0) < \infty$).
+The bivariate Archimedean copula is:
+\[
+    C(u_1, u_2) = \varphi^{-1}\bigl(\varphi(u_1) + \varphi(u_2)\bigr)
+\]
+\end{definition}
+
+The generator function encodes all the dependence structure.
+Different generators give different copula families with distinct tail properties.
+
+\subsection{The Three Main Families}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lllcc@{}}
+\toprule
+\textbf{Family} & \textbf{Generator} $\varphi(t)$ & \textbf{Parameter} & $\lambda_L$ & $\lambda_U$ \\
+\midrule
+Clayton & $\frac{1}{\theta}(t^{-\theta} - 1)$ & $\theta > 0$ & $2^{-1/\theta}$ & 0 \\[6pt]
+Gumbel & $(-\ln t)^\theta$ & $\theta \geq 1$ & 0 & $2 - 2^{1/\theta}$ \\[6pt]
+Frank & $-\ln\!\left(\frac{e^{-\theta t} - 1}{e^{-\theta} - 1}\right)$ & $\theta \neq 0$ & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\caption{The three main Archimedean copula families and their tail dependence properties.}
+\end{table}
+
+\textbf{Clayton} ($\theta > 0$):
+\[
+    C_\theta^{\text{Cl}}(u_1, u_2) = \left(u_1^{-\theta} + u_2^{-\theta} - 1\right)^{-1/\theta}
+\]
+\begin{itemize}
+    \item Strong \emph{lower} tail dependence, zero upper tail dependence.
+    \item As $\theta \to 0^+$, approaches independence; as $\theta \to \infty$, approaches comonotonicity.
+    \item \textbf{Use case}: modeling joint crashes. When both assets are in their lower tails simultaneously, Clayton assigns higher probability than the Gaussian or Frank copulas.
+\end{itemize}
+
+\textbf{Gumbel} ($\theta \geq 1$):
+\[
+    C_\theta^{\text{Gu}}(u_1, u_2) = \exp\!\left\{-\left[(-\ln u_1)^\theta + (-\ln u_2)^\theta\right]^{1/\theta}\right\}
+\]
+\begin{itemize}
+    \item Strong \emph{upper} tail dependence, zero lower tail dependence.
+    \item At $\theta = 1$, reduces to the independence copula $\Pi(u_1, u_2) = u_1 u_2$.
+    \item \textbf{Use case}: modeling joint booms or simultaneous extreme gains (less common in risk, but relevant for insurance).
+\end{itemize}
+
+\textbf{Frank} ($\theta \neq 0$):
+\[
+    C_\theta^{\text{Fr}}(u_1, u_2) = -\frac{1}{\theta}\ln\!\left(1 + \frac{(e^{-\theta u_1} - 1)(e^{-\theta u_2} - 1)}{e^{-\theta} - 1}\right)
+\]
+\begin{itemize}
+    \item \emph{No} tail dependence in either direction.
+    \item Symmetric dependence.
+    \item \textbf{Use case}: when you need a copula with no tail dependence but want flexibility
+          beyond the Gaussian (Frank allows a wider range of concordance measures).
+\end{itemize}
+
+\subsection{Worked Example: Clayton Copula for Joint Crashes}
+
+\begin{example}[Fitting Clayton to an equity pair]\label{ex:clayton}
+Consider daily losses of two assets: a US equity ETF (SPY) and a European equity ETF (EZU), 2000--2024.
+After GARCH filtering and PIT (described in Section~\ref{sec:workflow}),
+we have approximately 6{,}000 pairs $(u_1, u_2) \in [0,1]^2$.
+
+Fitting the Clayton copula by maximum likelihood:
+$\hat\theta = 0.85$.
+
+\textbf{Implied lower tail dependence}:
+\[
+    \hat\lambda_L = 2^{-1/\hat\theta} = 2^{-1/0.85} \approx 0.44
+\]
+
+Interpretation: given that SPY is experiencing an extreme loss
+(say, in its worst 1\% of days), there is a 44\% probability that EZU
+is \emph{simultaneously} in its worst 1\%.
+Under the Gaussian copula (regardless of correlation), this probability would approach 0\%.
+
+The Clayton copula captures what we see in crises:
+when one equity market crashes, others tend to crash simultaneously.
+The ``diversification benefit'' of holding both US and European equities is much smaller
+in the tail than correlation alone suggests.
+\end{example}
+
+%% ============================================================================
+\section{Vine Copulas}
+\label{sec:vine}
+%% ============================================================================
+
+For $d = 2$, any of the copulas above work directly.
+For $d > 2$, the situation is more complex:
+Archimedean copulas impose the same dependence between every pair (exchangeability),
+which is unrealistic.
+Elliptical copulas handle multiple dimensions but cannot capture asymmetric tail dependence.
+
+\textbf{Vine copulas} solve this by decomposing a $d$-dimensional copula
+into $d(d-1)/2$ \emph{bivariate} copulas, organized in a tree structure.
+Each bivariate building block (``pair copula'') can be from a different family.
+
+\subsection{Pair-Copula Construction}
+
+The idea relies on the decomposition of a $d$-dimensional density into conditional bivariate densities.
+For $d = 3$ with variables $(X_1, X_2, X_3)$:
+\begin{align*}
+    f(x_1, x_2, x_3)
+    &= f_1(x_1) \cdot f_{2|1}(x_2 \mid x_1) \cdot f_{3|12}(x_3 \mid x_1, x_2) \\
+    &= f_1(x_1) \cdot f_2(x_2) \cdot c_{12}(F_1(x_1), F_2(x_2)) \\
+    &\quad \times f_3(x_3) \cdot c_{13|2}(F_{1|2}(x_1 \mid x_2), F_{3|2}(x_3 \mid x_2))
+\end{align*}
+where $c_{ij}$ and $c_{ij|k}$ are bivariate copula densities (conditional and unconditional).
+
+The $\binom{d}{2} = d(d-1)/2$ bivariate copulas are organized in a sequence of trees.
+For $d = 5$, we need $5 \times 4 / 2 = 10$ pair copulas.
+
+\subsection{Three Vine Structures}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lp{6.5cm}l@{}}
+\toprule
+\textbf{Type} & \textbf{Structure} & \textbf{Best for} \\
+\midrule
+C-vine & Star: one ``central'' variable connected to all others in tree~1 & One dominant risk factor \\
+D-vine & Path: variables in a sequence & Natural ordering (e.g., time or geography) \\
+R-vine & General: any valid tree sequence & Most flexible; selected by AIC/BIC \\
+\bottomrule
+\end{tabular}
+\caption{Vine copula structures. The R-vine nests both C-vine and D-vine as special cases.}
+\end{table}
+
+\begin{keyidea}
+\textbf{Why vine copulas matter for risk.}
+A 10-asset portfolio has 45 pairs.
+With a vine copula, each pair can have its own copula family:
+\begin{itemize}
+    \item SPY--EZU: Clayton (strong lower tail dependence, joint equity crashes).
+    \item SPY--TLT: Frank (little tail dependence between equities and Treasuries).
+    \item GLD--SPY: Gumbel survival copula (dependence mainly during extreme sell-offs).
+\end{itemize}
+This level of granularity is impossible with a single multivariate copula.
+\end{keyidea}
+
+\begin{refbox}
+\begin{itemize}
+    \item Aas, K., Czado, C., Frigessi, A.\ \& Bakken, H.\ (2009).
+          ``Pair-copula constructions of multiple dependence.''
+          \emph{Insurance: Mathematics and Economics}, 44(2), 182--198.
+          The key applied paper for vine copulas.
+    \item Joe, H.\ (2014). \emph{Dependence Modeling with Copulas}.
+          Chapman \& Hall/CRC.
+          Comprehensive treatment of vine copulas and pair-copula constructions.
+    \item Czado, C.\ (2019). \emph{Analyzing Dependent Data with Vine Copulas}.
+          Springer. Modern monograph with R examples.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{The Workflow: GARCH Filtering + PIT + Copula}
+\label{sec:workflow}
+%% ============================================================================
+
+Copulas operate on \emph{uniform} random variables.
+Raw financial returns are neither uniform nor independent.
+The standard workflow transforms returns into a form suitable for copula fitting.
+
+\subsection{Step 1: GARCH Filtering}
+
+For each asset $i = 1, \ldots, d$, fit a GARCH-type model (e.g., GJR-GARCH with skewed-$t$ innovations):
+\[
+    r_{i,t} = \hat\mu_{i,t} + \hat\sigma_{i,t} \, z_{i,t}
+\]
+Extract the standardized residuals:
+\[
+    \hat{z}_{i,t} = \frac{r_{i,t} - \hat\mu_{i,t}}{\hat\sigma_{i,t}}
+\]
+
+\textbf{Why}: this removes the serial dependence (volatility clustering) from each return series.
+The residuals $\hat{z}_{i,t}$ should be approximately i.i.d.
+(Check with Ljung-Box tests on $\hat{z}_{i,t}$ and $\hat{z}_{i,t}^2$.)
+
+\subsection{Step 2: Probability Integral Transform (PIT)}
+
+Map each standardized residual to the unit interval using the (estimated) CDF of the innovation distribution:
+\[
+    \hat{u}_{i,t} = \hat{F}_{z_i}(\hat{z}_{i,t})
+\]
+
+Two approaches:
+\begin{itemize}
+    \item \textbf{Parametric PIT}: use the fitted innovation CDF (e.g., skewed-$t$ with estimated $\nu, \lambda$).
+    \item \textbf{Semi-parametric PIT}: use the empirical CDF of the residuals (the ``rank transform''):
+          $\hat{u}_{i,t} = \text{rank}(\hat{z}_{i,t}) / (T+1)$.
+          This avoids misspecification of the marginal distribution.
+\end{itemize}
+
+\textbf{Result}: if the marginal model is correct, $\hat{u}_{i,t} \sim \text{Uniform}(0,1)$ independently over time.
+The $d$-dimensional vectors $(\hat{u}_{1,t}, \ldots, \hat{u}_{d,t})$ are the \textbf{pseudo-observations}
+on which we fit the copula.
+
+\begin{warningbox}
+The PIT is the critical link between marginal and copula modeling.
+If the marginal model is wrong (e.g., assuming normal innovations when the data is heavy-tailed),
+the transformed values $\hat{u}_{i,t}$ will \emph{not} be uniform,
+and the copula fit will be contaminated.
+Always check uniformity of the PIT values (histogram, Kolmogorov-Smirnov test).
+\end{warningbox}
+
+\subsection{Step 3: Copula Fitting}
+
+Fit a copula to the pseudo-observations $\{(\hat{u}_{1,t}, \ldots, \hat{u}_{d,t})\}_{t=1}^T$.
+
+Methods:
+\begin{enumerate}
+    \item \textbf{Maximum likelihood}: maximize the copula log-likelihood
+    $\sum_{t=1}^T \ln c(\hat{u}_{1,t}, \ldots, \hat{u}_{d,t}; \bm{\theta})$
+    where $c$ is the copula density.
+    \item \textbf{Inference functions for margins (IFM)}: a two-step approach ---
+    first estimate marginal parameters, then copula parameters.
+    Computationally simpler; asymptotically efficient under correct specification.
+    \item \textbf{Model selection}: compare candidate copulas (Gaussian, $t$, Clayton, Gumbel, vine)
+    using AIC, BIC, or Vuong's test.
+\end{enumerate}
+
+\subsection{Step 4: Joint Simulation}
+
+To generate $N$ joint return scenarios:
+\begin{enumerate}
+    \item Sample $N$ vectors $(\tilde{u}_1, \ldots, \tilde{u}_d)$ from the fitted copula.
+    \item Invert the PIT: $\tilde{z}_i = \hat{F}_{z_i}^{-1}(\tilde{u}_i)$ to get standardized residuals.
+    \item Invert the GARCH: $\tilde{r}_{i} = \hat\mu_{i, T+1} + \hat\sigma_{i, T+1} \cdot \tilde{z}_i$ to get return scenarios.
+    \item Compute portfolio loss: $\tilde{L} = -\bm{w}^\top \tilde{\bm{r}}$.
+\end{enumerate}
+
+The result is a sample of $N$ portfolio losses that respects:
+\begin{itemize}
+    \item Each asset's conditional volatility (from GARCH).
+    \item Each asset's marginal tail behavior (from the innovation distribution or EVT).
+    \item The joint dependence structure (from the copula), including tail dependence.
+\end{itemize}
+
+\begin{keyidea}
+The four-step pipeline (GARCH $\to$ PIT $\to$ Copula $\to$ Simulation) is the \textbf{standard approach}
+in modern multivariate risk modeling.
+It cleanly separates three concerns:
+volatility dynamics (Step~1), marginal tail shape (Step~2), and dependence structure (Step~3).
+\end{keyidea}
+
+%% ============================================================================
+\section{Portfolio Risk Under Different Copulas}
+\label{sec:portfolio}
+%% ============================================================================
+
+\begin{example}[Three-asset portfolio simulation]\label{ex:portfolio}
+Consider a portfolio with equal weights ($w_i = 1/3$) in three assets:
+\begin{itemize}
+    \item SPY (US equities): annualized vol $\approx 18\%$, $\hat\xi_{\text{GPD}} \approx 0.25$.
+    \item EZU (European equities): annualized vol $\approx 22\%$, $\hat\xi_{\text{GPD}} \approx 0.28$.
+    \item HYG (US high-yield bonds): annualized vol $\approx 10\%$, $\hat\xi_{\text{GPD}} \approx 0.22$.
+\end{itemize}
+
+After GARCH filtering and PIT, we fit three copula models to the pseudo-observations
+and simulate $N = 100{,}000$ joint scenarios from each.
+
+\medskip
+\textbf{Copula specifications}:
+\begin{enumerate}
+    \item \textbf{Gaussian copula}: correlation matrix estimated from the pseudo-observations.
+    Pairwise correlations: $\hat\rho_{12} = 0.62$, $\hat\rho_{13} = 0.55$, $\hat\rho_{23} = 0.48$.
+
+    \item \textbf{Student-$t$ copula}: same correlation matrix, $\hat\nu = 6$ (estimated by MLE).
+
+    \item \textbf{Clayton copula}: $\hat\theta = 1.2$ (estimated from the lower tail concordance).
+\end{enumerate}
+
+\medskip
+\textbf{Results} (daily portfolio loss, as \% of portfolio value):
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Risk measure} & \textbf{Gaussian} & \textbf{Student-$t$} & \textbf{Clayton} \\
+\midrule
+$\VaR_{0.95}$ & 1.82\% & 1.89\% & 1.91\% \\
+$\VaR_{0.99}$ & 2.65\% & 3.01\% & 3.15\% \\
+$\VaR_{0.999}$ & 3.52\% & 4.38\% & 4.71\% \\
+$\ES_{0.99}$ & 3.18\% & 3.92\% & 4.24\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\medskip
+\textbf{Interpretation}:
+\begin{itemize}
+    \item At 95\%, the three copulas give similar results.
+          In the center of the distribution, the copula choice barely matters.
+    \item At 99\%, the $t$-copula gives 14\% higher VaR than Gaussian; Clayton gives 19\% higher.
+    \item At 99.9\%, the gap widens: the $t$-copula exceeds Gaussian by 24\%; Clayton by 34\%.
+    \item For $\ES_{0.99}$, Clayton exceeds Gaussian by 33\%.
+          This is the ``missing'' tail risk that the Gaussian copula systematically ignores.
+\end{itemize}
+
+\textbf{Why}: during joint crashes, all three assets fall together.
+The Gaussian copula treats extreme co-movements as negligibly rare.
+The $t$ and Clayton copulas assign realistic probability to these joint events.
+The portfolio loss in a joint crash is much larger than the sum of individual VaRs
+would suggest under Gaussian dependence.
+\end{example}
+
+\begin{keyresult}
+For a \$100M portfolio, the difference between Gaussian and Clayton copulas at 99.9\%
+is approximately \$1.2M in VaR and \$1.1M in ES.
+This is not a theoretical curiosity --- it directly affects capital reserves.
+Using the wrong copula means holding insufficient capital for joint tail events.
+\end{keyresult}
+
+\begin{warningbox}
+The Clayton copula used here has \emph{exchangeable} dependence:
+it assumes the same lower tail dependence between every pair.
+In practice, the SPY--EZU pair likely has stronger lower tail dependence than SPY--HYG.
+For a more realistic model, use a \textbf{vine copula} (Section~\ref{sec:vine})
+where each pair has its own copula family and parameters.
+\end{warningbox}
+
+%% ============================================================================
+\section{References}
+\label{sec:references}
+%% ============================================================================
+
+\begin{enumerate}[label={[\arabic*]}, leftmargin=2cm]
+    \item \textbf{Nelsen, R.B.}\ (2006).
+          \emph{An Introduction to Copulas}. 2nd ed.
+          Springer.
+          The standard textbook.
+          Chapters 2--4 cover Sklar's theorem, Archimedean copulas, and measures of dependence.
+
+    \item \textbf{Joe, H.}\ (2014).
+          \emph{Dependence Modeling with Copulas}.
+          Chapman \& Hall/CRC.
+          Advanced treatment; the definitive reference on vine copulas and pair-copula constructions.
+
+    \item \textbf{Embrechts, P., McNeil, A.J.\ \& Straumann, D.}\ (2002).
+          ``Correlation and dependence in risk management: properties and pitfalls.''
+          In \emph{Risk Management: Value at Risk and Beyond}, ed.\ M.\ Dempster, pp.\ 176--223.
+          Cambridge University Press.
+          The paper that made the case for copulas in risk management by demonstrating
+          the failures of correlation.
+
+    \item \textbf{Aas, K., Czado, C., Frigessi, A.\ \& Bakken, H.}\ (2009).
+          ``Pair-copula constructions of multiple dependence.''
+          \emph{Insurance: Mathematics and Economics}, 44(2), 182--198.
+          The key applied paper for vine copulas; includes algorithms and financial examples.
+
+    \item \textbf{McNeil, A.J., Frey, R.\ \& Embrechts, P.}\ (2015).
+          \emph{Quantitative Risk Management: Concepts, Techniques and Tools}. 2nd ed.
+          Princeton University Press.
+          Chapter 7 covers copulas in the context of quantitative risk management.
+
+    \item \textbf{Czado, C.}\ (2019).
+          \emph{Analyzing Dependent Data with Vine Copulas}.
+          Springer.
+          Modern monograph with detailed algorithms and R code examples.
+
+    \item \textbf{Li, D.X.}\ (2000).
+          ``On default correlation: a copula function approach.''
+          \emph{Journal of Fixed Income}, 9(4), 43--54.
+          The paper that introduced the Gaussian copula to credit derivatives.
+          A cautionary tale.
+
+    \item \textbf{Salmon, F.}\ (2009).
+          ``Recipe for disaster: the formula that killed Wall Street.''
+          \emph{Wired Magazine}, February 2009.
+          Accessible account of the Gaussian copula's role in the financial crisis.
+\end{enumerate}
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Andr\'es Gonz\'alez Ortega --- Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}

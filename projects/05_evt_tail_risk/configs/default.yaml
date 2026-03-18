@@ -1,0 +1,21 @@
+data:
+  ticker: "SPY"
+  start_date: "2000-01-01"
+  end_date: null
+  returns_type: "log"
+
+block_maxima:
+  block_size: 21  # trading days per month
+
+pot:
+  threshold_percentile: 95.0
+  threshold_method: "percentile"
+
+risk:
+  confidence_levels: [0.95, 0.99, 0.995, 0.999]
+
+diagnostics:
+  n_thresholds: 50
+  hill_k_max: 200
+
+random_seed: 42
