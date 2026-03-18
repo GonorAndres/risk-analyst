@@ -1,0 +1,27 @@
+data:
+  n_samples: 10000
+  test_ratio: 0.2
+  seed: 42
+
+features:
+  woe_bins: 10
+  min_iv: 0.02
+
+logistic:
+  C: 1.0
+  max_iter: 1000
+
+xgboost:
+  n_estimators: 200
+  max_depth: 5
+  learning_rate: 0.1
+  min_child_weight: 5
+  subsample: 0.8
+  colsample_bytree: 0.8
+  scale_pos_weight: null  # auto-compute from class ratio
+  eval_metric: "auc"
+
+calibration:
+  method: "isotonic"
+
+random_seed: 42

@@ -1,0 +1,16 @@
+simulation:
+  n_paths: 10000
+  n_steps: 252
+  seed: 42
+
+variance_reduction:
+  use_antithetic: true
+  use_control_variate: true
+
+option_pricing:
+  risk_free_rate: 0.05
+
+portfolio:
+  tickers: ["SPY", "QQQ", "IWM", "TLT", "GLD"]
+  weights: [0.2, 0.2, 0.2, 0.2, 0.2]
+  confidence_levels: [0.95, 0.99]

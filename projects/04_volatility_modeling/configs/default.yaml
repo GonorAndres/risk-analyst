@@ -1,0 +1,34 @@
+data:
+  ticker: "SPY"
+  start_date: "2010-01-01"
+  end_date: null
+  returns_type: "log"  # log or simple
+
+models:
+  garch:
+    p: 1
+    q: 1
+    dist: "t"  # normal, t, skewt
+  gjr_garch:
+    p: 1
+    o: 1
+    q: 1
+    dist: "t"
+  egarch:
+    p: 1
+    o: 1
+    q: 1
+    dist: "t"
+  regime_switching:
+    n_regimes: 2
+    switching_variance: true
+
+risk:
+  confidence_levels: [0.95, 0.99]
+  forecast_horizon: 1
+
+diagnostics:
+  ljung_box_lags: 10
+  qq_dist: "t"
+
+random_seed: 42
