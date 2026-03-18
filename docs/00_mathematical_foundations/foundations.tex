@@ -1,0 +1,481 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+% indicator function via boldsymbol (no extra package needed)
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+
+\title{%
+    \textbf{Foundations of Modern Financial Risk} \\[0.5em]
+    \large What You Need to Know Before Writing Code
+}
+\author{Risk Analyst Project}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A concise, example-driven introduction to the core concepts of modern financial risk analysis.
+Each idea is motivated by a concrete scenario, then generalized.
+We assume familiarity with probability, statistics, and basic stochastic processes;
+the focus is on \emph{how these tools are used in risk management} and \emph{why the field evolved the way it did}.
+References point to deeper material for each topic.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{What Risk Means in Finance}
+%% ============================================================================
+
+Risk in finance is not synonymous with volatility.
+It is the \emph{possibility of loss} --- specifically, loss that exceeds what you planned for.
+
+\begin{example}[A simple portfolio]
+You hold \$100{,}000 split equally between the S\&P~500 (SPY) and 20-year Treasury bonds (TLT).
+On a typical day the portfolio moves $\pm$\$500.
+But on March~16, 2020, the S\&P dropped 12\% in a single session while Treasuries also sold off.
+Your portfolio lost \$8{,}200 --- sixteen times the ``normal'' day.
+
+Risk management answers: \emph{How often can losses this large happen?
+How much capital should I reserve?
+What if it gets even worse?}
+\end{example}
+
+The field has converged on three interlocking concerns:
+
+\begin{enumerate}[leftmargin=2cm]
+    \item[\textbf{Measure}] Quantify the loss distribution: how bad can it get, and with what probability?
+    \item[\textbf{Manage}] Set limits, allocate capital, hedge, diversify.
+    \item[\textbf{Monitor}] Backtest your models against reality; adjust when they fail.
+\end{enumerate}
+
+%% ============================================================================
+\section{Loss Distributions and Tail Behavior}
+%% ============================================================================
+
+\subsection{From Returns to Losses}
+
+Let $r_t = \ln(P_t / P_{t-1})$ be the log-return of an asset.
+For a portfolio with weights $\bm{w}$ and asset returns $\bm{r}_t$, the portfolio return is $r_p = \bm{w}^\top \bm{r}_t$.
+The \textbf{loss} is $L = -r_p$ (we flip the sign so that losses are positive).
+
+The central object in risk is the \textbf{loss distribution} $F_L(x) = \PV(L \leq x)$.
+
+\subsection{Why the Normal Distribution Fails}
+
+\begin{example}[Fat tails in practice]\label{ex:fat-tails}
+Daily S\&P~500 returns from 1990--2025 have:
+\begin{itemize}
+    \item Kurtosis $\approx 11.5$ (normal = 3). Tails are \emph{much} heavier.
+    \item The Oct~19, 1987 crash ($-22.6\%$) is a $\sim$25-sigma event under normality --- probability $\approx 10^{-138}$.
+    \item In reality, moves $> 4\sigma$ happen about 10x more often than the normal predicts.
+\end{itemize}
+\end{example}
+
+\begin{keyresult}
+Financial returns exhibit \textbf{heavy tails} (excess kurtosis), \textbf{volatility clustering} (large moves follow large moves), and \textbf{asymmetry} (crashes are sharper than rallies).
+Any risk model that ignores these features will systematically underestimate losses.
+\end{keyresult}
+
+Better distributional choices:
+\begin{itemize}
+    \item \textbf{Student-$t$}: $f(x; \nu) \propto (1 + x^2/\nu)^{-(\nu+1)/2}$. Tails decay polynomially, not exponentially. Typical fit: $\nu \approx 4$--$6$ for equity returns.
+    \item \textbf{Generalized Pareto} (for extreme tails only): the correct asymptotic model for tail exceedances (see Section~\ref{sec:evt}).
+    \item \textbf{Skewed-$t$} (Hansen, 1994): adds asymmetry to Student-$t$. Used as the innovation distribution in GARCH models.
+\end{itemize}
+
+\begin{refbox}
+\begin{itemize}
+    \item Cont, R. (2001). ``Empirical properties of asset returns: stylized facts and statistical issues.'' \emph{Quantitative Finance}, 1(2), 223--236. \textit{The} survey of return properties.
+    \item McNeil, Frey \& Embrechts (2015). \emph{Quantitative Risk Management}, Ch.~3. Distributional models for returns.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Risk Measures: VaR, Expected Shortfall, and Coherence}
+\label{sec:risk-measures}
+%% ============================================================================
+
+\subsection{Value-at-Risk}
+
+\begin{definition}[Value-at-Risk]
+For a loss $L$ with distribution $F_L$ and confidence level $\alpha \in (0,1)$:
+\[
+    \VaR_\alpha(L) = F_L^{-1}(\alpha) = \inf\{x : F_L(x) \geq \alpha\}
+\]
+\end{definition}
+
+\begin{example}[Computing VaR]
+Your SPY/TLT portfolio has 252 daily returns over the past year.
+Sort the losses from smallest to largest.
+At $\alpha = 0.95$ (95\%), $\VaR_{0.95}$ is the 13th-worst loss (since $252 \times 0.05 \approx 13$).
+
+Suppose that value is \$1{,}850.
+Interpretation: ``On 95\% of days, losses do not exceed \$1{,}850.''
+Equivalently: ``We expect to lose more than \$1{,}850 about once every 20 trading days.''
+\end{example}
+
+\textbf{Three ways to compute VaR:}
+\begin{enumerate}
+    \item \textbf{Historical simulation}: sort historical losses, read off the quantile.
+    \item \textbf{Parametric (variance-covariance)}: assume $L \sim N(\mu, \sigma^2)$, then $\VaR_\alpha = \mu + \sigma \, \Phi^{-1}(\alpha)$. Fast but relies on normality.
+    \item \textbf{Monte Carlo}: simulate thousands of portfolio paths, compute losses, read off the quantile. Most flexible; handles non-linear instruments.
+\end{enumerate}
+
+\subsection{The Problem with VaR}
+
+\begin{warningbox}
+VaR tells you the \emph{threshold} but nothing about \emph{how bad it gets beyond that threshold}.
+Two portfolios can have identical VaR but very different tail losses.
+\end{warningbox}
+
+\begin{example}[VaR blindness]
+Portfolio A loses exactly \$2{,}000 on the 5\% worst days.
+Portfolio B loses \$2{,}000 on most of those days, but occasionally loses \$50{,}000.
+Both have $\VaR_{0.95} = \$2{,}000$.
+A risk manager using only VaR would treat them identically.
+\end{example}
+
+Worse: VaR is \textbf{not subadditive} in general.
+It is possible that $\VaR(A+B) > \VaR(A) + \VaR(B)$, meaning VaR can penalize diversification.
+
+\subsection{Expected Shortfall (CVaR)}
+
+\begin{definition}[Expected Shortfall]
+\[
+    \ES_\alpha(L) = \frac{1}{1-\alpha} \int_\alpha^1 \VaR_u(L) \, du
+\]
+When $F_L$ is continuous, this simplifies to:
+\[
+    \ES_\alpha(L) = \EV[L \mid L > \VaR_\alpha(L)]
+\]
+\end{definition}
+
+ES is the \emph{average loss in the tail} beyond VaR.
+It directly answers: ``When things go wrong, how wrong do they go on average?''
+
+\begin{example}[ES vs.\ VaR]
+For the same SPY/TLT portfolio, if $\VaR_{0.95} = \$1{,}850$, then $\ES_{0.95}$ averages the 13 worst losses.
+Suppose those are \$1{,}850, \$2{,}100, \$2{,}300, \ldots, \$8{,}200.
+Their average might be \$3{,}400.
+So $\ES_{0.95} = \$3{,}400$ --- nearly double the VaR.
+\end{example}
+
+\subsection{Coherent Risk Measures}
+
+Artzner et al.\ (1999) defined four axioms a ``sensible'' risk measure $\rho$ should satisfy:
+
+\begin{enumerate}
+    \item \textbf{Monotonicity}: If $L_1 \leq L_2$ always, then $\rho(L_1) \leq \rho(L_2)$.
+    \item \textbf{Subadditivity}: $\rho(L_1 + L_2) \leq \rho(L_1) + \rho(L_2)$. Diversification does not increase risk.
+    \item \textbf{Positive homogeneity}: $\rho(\lambda L) = \lambda \, \rho(L)$ for $\lambda > 0$.
+    \item \textbf{Translation invariance}: $\rho(L + c) = \rho(L) + c$. Adding cash reduces risk dollar-for-dollar.
+\end{enumerate}
+
+\begin{keyresult}
+\textbf{ES is coherent. VaR is not} (it fails subadditivity).
+This is the theoretical reason Basel III/IV replaced VaR with ES for market risk capital:
+the Fundamental Review of the Trading Book (FRTB) mandates $\ES_{0.975}$ instead of $\VaR_{0.99}$.
+\end{keyresult}
+
+\begin{refbox}
+\begin{itemize}
+    \item Artzner, Delbaen, Eber \& Heath (1999). ``Coherent measures of risk.'' \emph{Mathematical Finance}, 9(3), 203--228. The foundational paper.
+    \item Acerbi \& Tasche (2002). ``On the coherence of expected shortfall.'' \emph{Journal of Banking \& Finance}, 26(7), 1487--1503.
+    \item Jorion (2007). \emph{Value at Risk}. The practitioner's reference.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Extreme Value Theory: Modeling the Worst Cases}
+\label{sec:evt}
+%% ============================================================================
+
+Standard distributional fits (normal, $t$) apply to the \emph{bulk} of the distribution.
+For the extreme tails --- the 1\% or 0.1\% worst outcomes --- Extreme Value Theory (EVT) provides a rigorous framework.
+
+\subsection{The Key Theorem}
+
+\begin{theorem}[Pickands--Balkema--de Haan]
+For a wide class of distributions, the excess loss above a high threshold $u$ converges in distribution to the \textbf{Generalized Pareto Distribution} (GPD):
+\[
+    \PV(L - u \leq y \mid L > u) \approx G_{\xi, \beta}(y) =
+    \begin{cases}
+        1 - (1 + \xi y / \beta)^{-1/\xi} & \xi \neq 0 \\
+        1 - e^{-y/\beta} & \xi = 0
+    \end{cases}
+\]
+where $\xi$ is the \textbf{shape} (tail index) and $\beta > 0$ is the scale.
+\end{theorem}
+
+\begin{example}[Tail index interpretation]
+\begin{itemize}
+    \item $\xi > 0$ (heavy tail): Pareto-like. Typical for equity returns ($\xi \approx 0.2$--$0.4$).
+    \item $\xi = 0$ (light tail): exponential decay. Rare in finance.
+    \item $\xi < 0$ (bounded tail): finite upper endpoint. Insurance losses sometimes.
+\end{itemize}
+Fitting GPD to S\&P daily losses above the 95th percentile typically gives $\hat\xi \approx 0.25$, confirming heavy tails and allowing extrapolation to extreme quantiles (99.9\%) that have few or no historical observations.
+\end{example}
+
+\begin{refbox}
+\begin{itemize}
+    \item de Haan \& Ferreira (2006). \emph{Extreme Value Theory: An Introduction}. The mathematical reference.
+    \item McNeil \& Frey (2000). ``Estimation of tail-related risk measures for heteroscedastic financial time series.'' \emph{Journal of Empirical Finance}. The GARCH + EVT approach.
+    \item Embrechts, Kl\"uppelberg \& Mikosch (1997). \emph{Modelling Extremal Events}. Classic for insurance/finance.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Dependence: Beyond Correlation}
+%% ============================================================================
+
+\subsection{Why Correlation Is Not Enough}
+
+Pearson correlation $\rho$ measures \emph{linear} association.
+Two variables can have $\rho = 0$ yet be strongly dependent (e.g., $Y = X^2$).
+More critically for risk: assets that appear weakly correlated in normal markets can become highly correlated during crises.
+
+\begin{example}[Correlation breakdown]
+From 2005--2007, the correlation between US equities and mortgage-backed securities was $\approx 0.3$.
+During the 2008 crisis, it spiked above $0.8$.
+A portfolio diversified under normal-market correlation was far less diversified when it mattered most.
+\end{example}
+
+\subsection{Copulas: The Right Tool}
+
+A \textbf{copula} $C(u_1, \ldots, u_d)$ is a function that binds marginal distributions into a joint distribution.
+By Sklar's theorem, \emph{any} joint distribution can be decomposed as:
+\[
+    F(x_1, \ldots, x_d) = C\bigl(F_1(x_1), \ldots, F_d(x_d)\bigr)
+\]
+This separates two modeling choices:
+\begin{itemize}
+    \item \textbf{Marginals} $F_i$: model each asset's return distribution individually (e.g., GARCH with skewed-$t$).
+    \item \textbf{Dependence structure} $C$: model how they move together, especially in the tails.
+\end{itemize}
+
+Key copula families and their tail behavior:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Copula} & \textbf{Lower tail dep.}\ $\lambda_L$ & \textbf{Upper tail dep.}\ $\lambda_U$ \\
+\midrule
+Gaussian       & 0 & 0 \\
+Student-$t$    & $> 0$ (symmetric) & $> 0$ (symmetric) \\
+Clayton        & $> 0$ & 0 \\
+Gumbel         & 0 & $> 0$ \\
+Frank          & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\caption{Tail dependence by copula family. For risk, lower tail dependence (joint crashes) matters most. The Gaussian copula has \emph{none} --- this was a core flaw in pre-2008 CDO pricing.}
+\end{table}
+
+\begin{keyresult}
+The Gaussian copula assigns probability zero to joint extreme co-movements.
+This made it catastrophically wrong for pricing CDOs and estimating portfolio credit risk before 2008.
+Modern practice uses $t$-copulas or Clayton copulas that capture tail dependence.
+\end{keyresult}
+
+\begin{refbox}
+\begin{itemize}
+    \item Nelsen (2006). \emph{An Introduction to Copulas}. 2nd ed. The textbook.
+    \item Joe (2014). \emph{Dependence Modeling with Copulas}. Advanced, covers vine copulas.
+    \item Embrechts, McNeil \& Straumann (2002). ``Correlation and dependence in risk management.'' \emph{Risk Magazine}. Why correlation fails.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{The Regulatory Landscape: Why This Matters}
+%% ============================================================================
+
+Risk models do not exist in a vacuum.
+Banks, insurers, and asset managers operate under regulatory frameworks that dictate \emph{which} risk measures to compute, \emph{how} to compute them, and \emph{how much capital} to hold.
+
+\subsection{Basel Framework (Banking)}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{7.5cm}@{}}
+\toprule
+\textbf{Accord} & \textbf{Era} & \textbf{Key change for risk measurement} \\
+\midrule
+Basel I (1988)   & Simple & Flat capital charges by asset class. No internal models. \\
+Basel II (2004)  & VaR era & Banks allowed to use internal VaR models (99\%, 10-day). \\
+Basel III (2010) & Post-crisis & Stressed VaR, capital buffers, leverage ratio added. \\
+Basel III.1 / ``IV'' (2017--2028) & Current & \textbf{FRTB}: replaces VaR with ES at 97.5\%. Output floors on internal models. Standardized Measurement Approach for operational risk. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{FRTB (Fundamental Review of the Trading Book)}:
+\begin{itemize}
+    \item Market risk capital: $\ES_{0.975}$ over a base horizon of 10 days, computed with different liquidity horizons per risk factor.
+    \item Internal Models Approach (IMA): banks must pass backtesting at the desk level.
+    \item Standardized Approach (SA): sensitivities-based method (delta, vega, curvature) for banks without IMA approval.
+    \item Implementation: EU phasing 2025--2026, UK targeted 2027, US ``Basel Endgame'' from July 2025.
+\end{itemize}
+
+\subsection{What This Means for You}
+
+Every project in this repo connects to real regulatory or industry requirements:
+\begin{itemize}
+    \item \textbf{P01} (Dashboard): implements VaR and ES with Basel-mandated backtesting.
+    \item \textbf{P02} (Monte Carlo): the computational engine behind IMA.
+    \item \textbf{P03} (Credit Scoring): PD models under Basel IRB, with SR~11-7 model governance.
+    \item \textbf{P04} (Volatility): GARCH models feed into ES and VaR calculations.
+\end{itemize}
+
+\begin{refbox}
+\begin{itemize}
+    \item Basel Committee (2019). ``Minimum capital requirements for market risk.'' BCBS d457. The FRTB standard.
+    \item Federal Reserve (2011). SR~11-7: ``Guidance on Model Risk Management.'' Gold standard for model governance.
+    \item Hull (2018). \emph{Risk Management and Financial Institutions}. Ch.~15--17 on Basel.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Stochastic Processes for Risk}
+%% ============================================================================
+
+You already know stochastic processes from your actuarial training.
+Here we focus on the specific models used in financial risk and \emph{why} each matters.
+
+\subsection{Geometric Brownian Motion (GBM)}
+
+The workhorse of Monte Carlo simulation:
+\[
+    dS_t = \mu S_t \, dt + \sigma S_t \, dW_t
+    \quad \Longrightarrow \quad
+    S_T = S_0 \exp\!\left[\left(\mu - \tfrac{\sigma^2}{2}\right)T + \sigma W_T\right]
+\]
+\textbf{Used in}: option pricing (Black-Scholes), portfolio simulation, VaR by Monte Carlo.
+
+\textbf{Limitation}: constant volatility $\sigma$.
+Markets exhibit volatility clustering --- addressed by GARCH (discrete) and stochastic volatility models (continuous).
+
+\subsection{GARCH(1,1): Volatility That Remembers}
+
+\[
+    r_t = \mu + \epsilon_t, \quad \epsilon_t = \sigma_t z_t, \quad z_t \sim D(0,1)
+\]
+\[
+    \sigma_t^2 = \omega + \alpha \epsilon_{t-1}^2 + \beta \sigma_{t-1}^2
+\]
+where $D$ is typically Student-$t$ or skewed-$t$.
+
+\begin{example}[GARCH intuition]
+If yesterday's return was large ($|\epsilon_{t-1}|$ big), today's conditional variance $\sigma_t^2$ increases.
+The $\beta$ term gives persistence: high volatility regimes last for weeks or months.
+For the S\&P~500, typical estimates are $\alpha \approx 0.09$, $\beta \approx 0.90$, giving persistence $\alpha + \beta \approx 0.99$ --- volatility shocks decay very slowly.
+\end{example}
+
+\textbf{Extensions} (covered in Project~04): GJR-GARCH (leverage effect: negative returns increase volatility more), EGARCH (log-volatility, no positivity constraint), APARCH (power transformations).
+
+\subsection{Mean-Reverting Processes}
+
+For interest rates and credit spreads, the Ornstein-Uhlenbeck / Vasicek model:
+\[
+    dr_t = \kappa(\theta - r_t)\,dt + \sigma\,dW_t
+\]
+Mean-reverts to $\theta$ at speed $\kappa$.
+Used in: yield curve modeling, CVA calculations (Project~09), credit intensity models.
+
+\begin{refbox}
+\begin{itemize}
+    \item Glasserman (2003). \emph{Monte Carlo Methods in Financial Engineering}. Ch.~3 (GBM simulation), Ch.~8 (variance reduction).
+    \item Engle (1982). ``Autoregressive conditional heteroscedasticity.'' \emph{Econometrica}. The ARCH origin.
+    \item Bollerslev (1986). ``Generalized autoregressive conditional heteroscedasticity.'' \emph{Journal of Econometrics}. GARCH(1,1).
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Summary: The Mental Model}
+%% ============================================================================
+
+\begin{center}
+\begin{tabular}{@{}p{3cm}p{4.5cm}p{5cm}@{}}
+\toprule
+\textbf{Layer} & \textbf{What it does} & \textbf{Key tools} \\
+\midrule
+Marginals & Model each risk factor's distribution & GARCH, Student-$t$, skewed-$t$, EVT (GPD) \\
+\addlinespace
+Dependence & Model how risk factors move together & Copulas (Gaussian, $t$, Clayton, vine) \\
+\addlinespace
+Aggregation & Combine into portfolio loss distribution & Monte Carlo, variance reduction, FFT \\
+\addlinespace
+Risk measures & Summarize the loss distribution & VaR, ES, spectral measures \\
+\addlinespace
+Validation & Check if the model works & Backtesting (Kupiec, Christoffersen), stress testing \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Every project in the curriculum operates within this pipeline.
+The first four projects build it from the ground up:
+the dashboard (P01) computes measures and validates them;
+the MC engine (P02) handles aggregation;
+credit scoring (P03) models a different kind of marginal (default probability);
+and volatility modeling (P04) improves the marginal layer.
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}

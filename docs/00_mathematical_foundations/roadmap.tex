@@ -1,0 +1,450 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Colored boxes
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={References},
+    #1
+}
+
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+
+\title{%
+    \textbf{Project Roadmap: The First Four Projects} \\[0.5em]
+    \large What Each Project Teaches and Why It Matters
+}
+\author{Risk Analyst Project}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A preview of Projects 01--04.
+For each project: the problem it solves, the core mathematical ideas,
+a worked micro-example, what to read before coding, and where to go deeper.
+This document is for \emph{understanding} --- the implementation details live in each project's own theory document.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{Project 01: Portfolio Risk Dashboard}
+%% ============================================================================
+
+\begin{objective}
+An interactive dashboard that computes VaR and ES for a multi-asset portfolio using three methods (historical, parametric, Monte Carlo), then rigorously backtests the results against realized losses.
+\end{objective}
+
+\subsection{The Problem}
+
+You manage a portfolio.
+Every morning you need to answer: \emph{``What is the most I could lose today with 95\% (or 99\%) confidence?''}
+And at the end of the quarter: \emph{``Was my risk model actually correct?''}
+
+\subsection{Three Ways to Answer}
+
+\begin{enumerate}
+    \item \textbf{Historical simulation.}
+    Take the last 252 daily returns.
+    Apply today's portfolio weights.
+    Sort the resulting P\&L.
+    The 5th percentile (for $\alpha = 0.95$) is VaR.
+
+    \textit{Strength}: no distributional assumptions.
+    \textit{Weakness}: limited by the historical window.
+    If the window is calm, VaR is too low.
+
+    \item \textbf{Parametric (variance-covariance).}
+    Assume returns are multivariate normal with mean $\bm{\mu}$ and covariance $\bm{\Sigma}$.
+    Portfolio variance: $\sigma_p^2 = \bm{w}^\top \bm{\Sigma} \bm{w}$.
+    Then:
+    \[
+        \VaR_\alpha = -\bm{w}^\top \bm{\mu} + \sigma_p \, \Phi^{-1}(\alpha)
+    \]
+    \textit{Strength}: fast, closed-form.
+    \textit{Weakness}: assumes normality (underestimates tail risk).
+
+    \item \textbf{Monte Carlo.}
+    Simulate $N = 10{,}000$ return scenarios from a fitted model (e.g., multivariate $t$ or GARCH).
+    Compute portfolio loss for each scenario.
+    VaR is the empirical $\alpha$-quantile of the simulated losses.
+
+    \textit{Strength}: handles any distribution, non-linear instruments, complex portfolios.
+    \textit{Weakness}: computationally expensive; depends on the simulation model.
+\end{enumerate}
+
+\subsection{Backtesting: Did the Model Work?}
+
+A VaR model at level $\alpha$ should be violated on $(1-\alpha)$ fraction of days.
+Over 250 trading days at $\alpha = 0.99$, expect $\sim$2.5 violations.
+
+\begin{keyidea}
+\textbf{Kupiec test} (1995): under the null hypothesis, the number of violations $x$ in $T$ days follows $\text{Binomial}(T, 1-\alpha)$.
+The likelihood ratio test statistic:
+\[
+    LR_{uc} = -2 \ln\!\left[\frac{(1-\alpha)^{T-x} \, \alpha^x}{\hat{p}^{T-x} (1-\hat{p})^x}\right]
+    \sim \chi^2(1) \quad \text{under } H_0
+\]
+where $\hat{p} = x/T$ is the observed violation rate.
+Reject if $LR_{uc} > \chi^2_{1, 0.05}$.
+
+\medskip
+
+\textbf{Christoffersen test} (1998): tests not just the \emph{count} of violations, but whether they \emph{cluster}.
+Violations should be independent --- if Monday's VaR is breached, that should not predict Tuesday's breach.
+Uses a Markov chain model for the violation indicator.
+
+\medskip
+
+\textbf{Basel traffic-light test}: at 99\% over 250 days, the number of violations determines the zone:
+\begin{itemize}
+    \item Green: 0--4 violations. Model accepted.
+    \item Yellow: 5--9 violations. Increased scrutiny + capital multiplier.
+    \item Red: 10+ violations. Model rejected; switch to standardized approach.
+\end{itemize}
+\end{keyidea}
+
+\begin{prereq}
+\begin{itemize}
+    \item Foundations document, Sections 2--3 (loss distributions, VaR, ES, coherence).
+    \item Jorion (2007), Ch.~6: ``Backtesting VaR.'' The definitive treatment.
+    \item Christoffersen (1998). ``Evaluating interval forecasts.'' \emph{International Economic Review}.
+\end{itemize}
+\end{prereq}
+
+\begin{refbox}
+\begin{itemize}
+    \item Kupiec (1995). ``Techniques for verifying the accuracy of risk measurement models.'' \emph{Journal of Derivatives}.
+    \item Basel Committee (1996). ``Supervisory framework for backtesting.'' The traffic-light system.
+    \item Alexander (2008). \emph{Market Risk Analysis}, Vol.~IV. Comprehensive VaR treatment.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Project 02: Monte Carlo Simulation Engine}
+%% ============================================================================
+
+\begin{objective}
+A reusable simulation engine that generates correlated asset paths, prices derivatives, and computes portfolio risk --- with variance reduction techniques that make results 10--100x more precise for the same computational cost.
+\end{objective}
+
+\subsection{The Problem}
+
+Many risk calculations require computing expectations of the form:
+\[
+    \theta = \EV[g(\bm{S}_T)]
+\]
+where $\bm{S}_T$ is the vector of asset prices at time $T$ and $g$ is some payoff or loss function.
+When $g$ is non-linear (options, structured products) or the distribution is complex (non-Gaussian, path-dependent), closed-form solutions rarely exist.
+Monte Carlo simulation approximates:
+\[
+    \hat{\theta} = \frac{1}{N}\sum_{i=1}^{N} g(\bm{S}_T^{(i)})
+\]
+
+\subsection{Simulating Correlated Assets}
+
+For $d$ assets following correlated GBM, we need correlated Brownian increments.
+
+\begin{keyidea}
+\textbf{Cholesky decomposition}: given correlation matrix $\bm{R}$ with Cholesky factor $\bm{L}$ (so $\bm{R} = \bm{L}\bm{L}^\top$), generate independent $\bm{z} \sim N(\bm{0}, \bm{I})$ and set $\bm{\epsilon} = \bm{L}\bm{z}$.
+Then $\bm{\epsilon}$ has the desired correlation structure.
+
+For 3 assets with correlations $\rho_{12} = 0.6$, $\rho_{13} = 0.3$, $\rho_{23} = 0.4$:
+\[
+\bm{R} = \begin{pmatrix} 1 & 0.6 & 0.3 \\ 0.6 & 1 & 0.4 \\ 0.3 & 0.4 & 1 \end{pmatrix}
+\xrightarrow{\text{Cholesky}}
+\bm{L} = \begin{pmatrix} 1 & 0 & 0 \\ 0.6 & 0.8 & 0 \\ 0.3 & 0.275 & 0.912 \end{pmatrix}
+\]
+Each simulation draw: sample 3 independent normals, multiply by $\bm{L}$, get correlated increments.
+\end{keyidea}
+
+\subsection{Variance Reduction: Getting More from Less}
+
+The naive MC estimator has standard error $\sigma / \sqrt{N}$.
+Halving the error requires 4x the simulations.
+Variance reduction techniques achieve better precision without more computation:
+
+\begin{enumerate}
+    \item \textbf{Antithetic variates.}
+    For each sample $\bm{z}$, also use $-\bm{z}$.
+    Since $g(\bm{z})$ and $g(-\bm{z})$ are negatively correlated, their average has lower variance.
+    Typical reduction: 20--50\% for monotone payoffs.
+
+    \item \textbf{Control variates.}
+    Find a related quantity $h(\bm{S})$ whose expectation $\EV[h]$ is known analytically.
+    Use: $\hat\theta_{cv} = \hat\theta - c(\bar{h} - \EV[h])$, where $c$ is chosen to minimize variance.
+
+    \textit{Example}: when pricing an Asian option by MC, use a geometric Asian option (has closed-form) as the control.
+
+    \item \textbf{Importance sampling.}
+    Shift the sampling distribution toward the region that matters (e.g., the tail for VaR).
+    Sample from $q$ instead of $p$; correct with likelihood ratios $p(\bm{x})/q(\bm{x})$.
+    Critical for rare-event simulation (estimating $\PV(L > \VaR_{0.999})$).
+\end{enumerate}
+
+\begin{prereq}
+\begin{itemize}
+    \item Foundations document, Section 6 (GBM, stochastic processes).
+    \item Glasserman (2003), Ch.~4: ``Generating random numbers and variates.'' Ch.~8: ``Variance reduction.''
+    \item Linear algebra refresher: Cholesky decomposition.
+\end{itemize}
+\end{prereq}
+
+\begin{refbox}
+\begin{itemize}
+    \item Glasserman (2003). \emph{Monte Carlo Methods in Financial Engineering}. The bible for financial MC.
+    \item Jaeckel (2002). \emph{Monte Carlo Methods in Finance}. More implementation-focused.
+    \item Broadie \& Glasserman (1996). ``Estimating security price derivatives using simulation.'' \emph{Management Science}. Greeks by MC.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Project 03: Credit Scoring with ML}
+%% ============================================================================
+
+\begin{objective}
+A probability-of-default (PD) model on real lending data, using both interpretable (logistic regression) and high-performance (XGBoost) approaches, with full explainability (SHAP) and regulatory-grade documentation.
+\end{objective}
+
+\subsection{The Problem}
+
+A bank receives 1{,}000 loan applications per day.
+For each one: \emph{what is the probability this borrower will default within 12 months?}
+The answer determines:
+\begin{itemize}
+    \item Whether to approve the loan.
+    \item What interest rate to charge (risk-based pricing).
+    \item How much capital to hold (Basel IRB: $\text{capital} = f(\text{PD}, \text{LGD}, \text{EAD})$).
+\end{itemize}
+
+\subsection{The PD--LGD--EAD Framework}
+
+Credit risk is decomposed into three components:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lp{8cm}@{}}
+\toprule
+\textbf{Component} & \textbf{Meaning} \\
+\midrule
+PD (Probability of Default) & Likelihood the borrower fails to pay within a given horizon. This is what the ML model estimates. \\
+LGD (Loss Given Default) & Fraction of exposure lost if default occurs (1 $-$ recovery rate). Typically 40--60\% for unsecured loans. \\
+EAD (Exposure at Default) & Outstanding amount at the time of default. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Expected loss: $\text{EL} = \text{PD} \times \text{LGD} \times \text{EAD}$.
+
+\subsection{Feature Engineering: WoE and IV}
+
+\begin{keyidea}
+\textbf{Weight of Evidence (WoE)} transforms categorical/binned features into a continuous scale that measures predictive power:
+\[
+    \text{WoE}_i = \ln\!\left(\frac{\% \text{ of non-defaults in bin } i}{\% \text{ of defaults in bin } i}\right)
+\]
+\textbf{Information Value (IV)} aggregates WoE across bins:
+\[
+    \text{IV} = \sum_i \bigl(\%\text{non-default}_i - \%\text{default}_i\bigr) \times \text{WoE}_i
+\]
+Rule of thumb: IV $< 0.02$ (useless), $0.02$--$0.1$ (weak), $0.1$--$0.3$ (medium), $> 0.3$ (strong).
+
+WoE encoding has a deep connection to logistic regression: it is equivalent to fitting a piecewise-constant log-odds model.
+\end{keyidea}
+
+\subsection{Why Explainability Matters}
+
+Regulators (SR~11-7, EU AI Act) require that credit decisions be \emph{explainable}.
+A borrower denied credit has the legal right to know why.
+XGBoost achieves superior discrimination (AUC $\approx 0.80$--$0.85$) but is a black box.
+
+\textbf{SHAP (SHapley Additive exPlanations)} provides a principled solution:
+\begin{itemize}
+    \item Rooted in cooperative game theory (Shapley values from 1953).
+    \item For each prediction, SHAP assigns an importance score to every feature.
+    \item Satisfies desirable axioms: efficiency, symmetry, linearity, null player.
+    \item Produces both \emph{global} explanations (which features matter overall) and \emph{local} explanations (why \emph{this} applicant was rejected).
+\end{itemize}
+
+\begin{prereq}
+\begin{itemize}
+    \item Foundations document, Section 5 (regulatory landscape --- Basel IRB, SR~11-7).
+    \item Siddiqi (2017). \emph{Intelligent Credit Scoring}, Ch.~3--5. WoE, IV, scorecard construction.
+    \item Lundberg \& Lee (2017). ``A unified approach to interpreting model predictions.'' \emph{NeurIPS}. The SHAP paper.
+\end{itemize}
+\end{prereq}
+
+\begin{refbox}
+\begin{itemize}
+    \item Siddiqi (2017). \emph{Intelligent Credit Scoring}. The practitioner's reference for scorecards.
+    \item Thomas, Edelman \& Crook (2002). \emph{Credit Scoring and Its Applications}. Classic text.
+    \item Federal Reserve (2011). SR~11-7: ``Guidance on Model Risk Management.'' Required reading for any model in production.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Project 04: Volatility Modeling}
+%% ============================================================================
+
+\begin{objective}
+Fit and compare GARCH-family models (GARCH, GJR-GARCH, EGARCH) and regime-switching models on equity returns, producing conditional volatility forecasts that feed into VaR/ES calculations.
+\end{objective}
+
+\subsection{The Problem}
+
+Volatility is not constant.
+Large returns tend to be followed by large returns (of either sign).
+This \emph{volatility clustering} means yesterday's market behavior carries information about today's risk.
+A risk model that ignores this will:
+\begin{itemize}
+    \item Overestimate risk during calm periods (capital inefficiency).
+    \item Underestimate risk during turbulent periods (dangerous).
+\end{itemize}
+
+\subsection{The GARCH Family}
+
+All GARCH variants model the conditional variance $\sigma_t^2$ as a function of past returns and past variances.
+
+\begin{keyidea}
+\textbf{GARCH(1,1)} (Bollerslev, 1986):
+\[
+    \sigma_t^2 = \omega + \alpha \epsilon_{t-1}^2 + \beta \sigma_{t-1}^2
+\]
+Three effects:
+\begin{enumerate}
+    \item $\omega$: baseline (unconditional) variance level.
+    \item $\alpha \epsilon_{t-1}^2$: \textbf{shock impact} --- large yesterday's return increases today's variance.
+    \item $\beta \sigma_{t-1}^2$: \textbf{persistence} --- yesterday's variance carries forward.
+\end{enumerate}
+Unconditional variance: $\bar\sigma^2 = \omega / (1 - \alpha - \beta)$.
+Persistence: $\alpha + \beta$ (close to 1 for financial data).
+
+\medskip
+
+\textbf{GJR-GARCH} (Glosten, Jagannathan \& Runkle, 1993):
+\[
+    \sigma_t^2 = \omega + (\alpha + \gamma \, \ind_{\epsilon_{t-1} < 0}) \epsilon_{t-1}^2 + \beta \sigma_{t-1}^2
+\]
+The $\gamma$ term captures the \textbf{leverage effect}: negative returns (bad news) increase volatility more than positive returns of the same magnitude.
+Empirically, $\gamma > 0$ for equities.
+
+\medskip
+
+\textbf{EGARCH} (Nelson, 1991): models $\ln(\sigma_t^2)$, which:
+\begin{itemize}
+    \item Guarantees $\sigma_t^2 > 0$ without parameter constraints.
+    \item Captures asymmetry through sign and magnitude of standardized residuals.
+\end{itemize}
+\end{keyidea}
+
+\subsection{Regime-Switching: Two (or More) Market States}
+
+\begin{keyidea}
+\textbf{Markov Regime-Switching} (Hamilton, 1989) assumes the market alternates between hidden states (e.g., ``calm'' and ``crisis''), each with its own volatility parameters:
+\begin{align*}
+    \text{State 1 (calm)}: &\quad \sigma_1 \approx 10\% \text{ annualized} \\
+    \text{State 2 (crisis)}: &\quad \sigma_2 \approx 35\% \text{ annualized}
+\end{align*}
+The transition between states follows a Markov chain with probability matrix:
+\[
+    P = \begin{pmatrix} p_{11} & 1 - p_{11} \\ 1 - p_{22} & p_{22} \end{pmatrix}
+\]
+Typical estimates: $p_{11} \approx 0.98$ (calm is persistent), $p_{22} \approx 0.92$ (crises are shorter-lived).
+The model filters the data to estimate the \emph{probability of being in each regime at each time step}, which directly informs risk levels.
+\end{keyidea}
+
+\subsection{From Volatility to Risk Measures}
+
+The connection to Projects 01 and 02:
+\begin{itemize}
+    \item \textbf{Conditional VaR}: $\VaR_{t,\alpha} = \hat\mu_t + \hat\sigma_t \, q_\alpha(z)$, where $q_\alpha(z)$ is the quantile of the standardized innovation distribution (e.g., $t_\nu$).
+    \item \textbf{Filtered historical simulation}: fit GARCH to get $\hat\sigma_t$, then use the standardized residuals $z_t = \epsilon_t / \hat\sigma_t$ as the empirical innovation distribution. Re-scale by today's $\hat\sigma_{T+1}$ to get forward-looking VaR.
+    \item \textbf{GARCH + EVT}: apply EVT (Project 05) to the standardized residuals rather than raw returns, separating the volatility dynamics from the tail behavior.
+\end{itemize}
+
+\begin{prereq}
+\begin{itemize}
+    \item Foundations document, Section 6 (GARCH(1,1) overview, stochastic processes).
+    \item Foundations document, Section 2 (why normality fails, fat tails).
+    \item Tsay (2010). \emph{Analysis of Financial Time Series}, Ch.~3. GARCH models in detail.
+    \item Hamilton (1994). \emph{Time Series Analysis}, Ch.~22. Regime-switching models.
+\end{itemize}
+\end{prereq}
+
+\begin{refbox}
+\begin{itemize}
+    \item Engle (1982). ``Autoregressive conditional heteroscedasticity.'' \emph{Econometrica}. The ARCH origin (Nobel Prize, 2003).
+    \item Bollerslev (1986). ``Generalized autoregressive conditional heteroscedasticity.'' \emph{Journal of Econometrics}. GARCH.
+    \item Hansen \& Lunde (2005). ``A forecast comparison of volatility models.'' \emph{Journal of Applied Econometrics}. Compares 330 GARCH variants.
+    \item Hamilton (1989). ``A new approach to the economic analysis of nonstationary time series.'' \emph{Econometrica}. Regime-switching.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{How the Four Projects Connect}
+%% ============================================================================
+
+\begin{center}
+\begin{tabular}{@{}cp{3.5cm}p{4cm}p{4cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Project} & \textbf{Builds on} & \textbf{Feeds into} \\
+\midrule
+01 & Risk Dashboard & --- (starting point) & Uses P02 for MC VaR; uses P04 for conditional VaR \\
+02 & Monte Carlo Engine & P01 (what to compute) & Core engine for P01, P05, P06, P08, P09 \\
+03 & Credit Scoring & Independent (different risk type) & Feeds PD into P07 (stress testing), P09 (CVA) \\
+04 & Volatility Models & P01 (volatility = input to VaR) & Improves P01's conditional VaR; marginals for P06 (copulas) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Suggested reading order}: Foundations PDF $\to$ P01 (get the big picture) $\to$ P02 (the computational engine) $\to$ P04 (improve the inputs) $\to$ P03 (a different risk domain).
+
+You can start P03 at any time since credit risk is largely independent of market risk concepts.
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}
