@@ -1,0 +1,157 @@
+\documentclass[11pt, a4paper]{article}
+
+% ─── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}                         % Bold math symbols
+\usepackage{bbm}                        % Blackboard bold for indicators
+\usepackage{physics}                    % Derivatives, norms, brackets
+\usepackage{algorithm, algpseudocode}   % Pseudocode
+\usepackage{booktabs}                   % Tables
+\usepackage{graphicx}                   % Figures
+\usepackage{hyperref}                   % Clickable references
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}                  % Colored boxes for key results
+\usepackage{listings}                   % Code snippets
+\usepackage[backend=biber, style=authoryear, sorting=nyt]{biblatex}
+
+% ─── Theorem environments ──────────────────────────────────────────────────────
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{corollary}{Corollary}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% ─── Key result box ────────────────────────────────────────────────────────────
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Result},
+    #1
+}
+
+% ─── Code-link box (connects math to implementation) ──────────────────────────
+\newtcolorbox{codelink}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Implementation Reference},
+    #1
+}
+
+% ─── Code listing style ───────────────────────────────────────────────────────
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red!70!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    frame=single,
+    breaklines=true,
+}
+
+% ─── Custom commands ───────────────────────────────────────────────────────────
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\EV}{\mathbb{E}}           % Expectation
+\newcommand{\PV}{\mathbb{P}}           % Probability
+\newcommand{\QV}{\mathbb{Q}}           % Risk-neutral measure
+\newcommand{\RV}{\mathbb{R}}           % Real numbers
+\newcommand{\ind}{\mathbbm{1}}         % Indicator function
+\newcommand{\cov}{\operatorname{Cov}}
+\newcommand{\corr}{\operatorname{Corr}}
+\newcommand{\var}{\operatorname{Var}}
+
+% ─── Document ──────────────────────────────────────────────────────────────────
+% TEMPLATE: Copy this file to your project's docs/ directory and customize.
+% Replace the placeholders below.
+
+\title{%
+    \textbf{Project XX: [Project Title]} \\[0.5em]
+    \large Risk Analyst -- Frontier Quantitative Risk Analysis
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+    [One paragraph: what problem this project solves, which techniques it uses,
+    and what the key results are.]
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Motivation and Problem Statement}
+% Why does this problem matter? What real-world risk question does it address?
+% Frame it for someone who understands probability but may not know the specific
+% technique.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Mathematical Foundations}
+% Full derivations. Don't skip steps. Number every important equation.
+
+\subsection{Setup and Notation}
+% Define the probability space, random variables, and key notation.
+
+\subsection{Main Results}
+% State and prove the core theorems/propositions.
+
+\begin{keyresult}
+    [State the main result concisely here.]
+\end{keyresult}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Algorithm}
+% Pseudocode for the computational method.
+
+\begin{algorithm}[H]
+\caption{[Algorithm Name]}
+\begin{algorithmic}[1]
+    \Require Input parameters
+    \Ensure Output description
+    \State [Step 1]
+    \State [Step 2]
+    \Return [Result]
+\end{algorithmic}
+\end{algorithm}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Connection to Code}
+% Map equations to functions. Use \texttt{} for code references.
+
+\begin{codelink}
+    Equation~\eqref{} is implemented in \texttt{src/model.py:function\_name()},
+    lines XX--YY.
+\end{codelink}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Numerical Examples}
+% Show specific calculations that match the code output.
+% Include tables comparing analytic vs. computed results.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Extensions and Limitations}
+% What assumptions were made? Where does the model break?
+% What frontier research addresses these limitations?
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{References}
+% Use biblatex or manual bibliography.
+
+\end{document}

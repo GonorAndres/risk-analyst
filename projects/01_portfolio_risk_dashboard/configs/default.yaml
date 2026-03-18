@@ -1,0 +1,25 @@
+# Portfolio Risk Dashboard -- Default Configuration
+
+data:
+  tickers: ["SPY", "QQQ", "IWM", "TLT", "GLD"]
+  start_date: "2015-01-01"
+  end_date: null  # null = latest available
+  frequency: "1d"
+
+risk_measures:
+  confidence_levels: [0.95, 0.99]
+  var_methods: ["historical", "parametric", "monte_carlo"]
+  monte_carlo_simulations: 10000
+  rolling_window: 252  # trading days
+  ewma_lambda: 0.94  # RiskMetrics decay factor
+
+backtesting:
+  test_window: 250  # days for backtesting evaluation
+  kupiec_significance: 0.05
+  christoffersen_significance: 0.05
+
+visualization:
+  theme: "plotly_white"
+  rolling_vol_window: 21  # trading days
+
+random_seed: 42

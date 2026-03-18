@@ -1,0 +1,116 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "risk-analyst"
+version = "0.1.0"
+description = "Frontier quantitative risk analysis: 13 progressive Python projects from VaR to deep hedging"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Andres Gonzalez Ortega"},
+]
+keywords = ["risk", "quantitative-finance", "portfolio", "credit-risk", "machine-learning", "copula", "evt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # Core scientific stack
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scipy>=1.12",
+    "matplotlib>=3.8",
+    "plotly>=5.18",
+
+    # Data ingestion
+    "yfinance>=0.2.36",
+    "fredapi>=0.5.2",
+    "pandas-datareader>=0.10",
+
+    # Configuration
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+risk = [
+    # Risk & finance libraries
+    "QuantLib-Python>=1.33",
+    "Riskfolio-Lib>=6.0",
+    "arch>=7.0",
+    "pyextremes>=2.3",
+    "copulae>=0.7",
+    "pycop>=0.2",
+    "PyPortfolioOpt>=1.5",
+    "financepy>=0.350",
+    "chainladder>=0.8",
+]
+ml = [
+    # Machine learning
+    "scikit-learn>=1.4",
+    "xgboost>=2.0",
+    "lightgbm>=4.2",
+    "shap>=0.44",
+    "torch>=2.2",
+    "torch-geometric>=2.4",
+    "numpyro>=0.14",
+    "jax>=0.4",
+    "jaxlib>=0.4",
+    "stable-baselines3>=2.2",
+]
+viz = [
+    # Visualization & dashboards
+    "streamlit>=1.30",
+    "seaborn>=0.13",
+]
+dev = [
+    # Development tools
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.92",
+    "mypy>=1.8",
+    "ruff>=0.2",
+    "pre-commit>=3.6",
+    "ipykernel>=6.28",
+    "jupyterlab>=4.0",
+]
+all = [
+    "risk-analyst[risk,ml,viz,dev]",
+]
+
+[project.urls]
+Repository = "https://github.com/andtega349/risk-analyst"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["risk_analyst"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "projects"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
