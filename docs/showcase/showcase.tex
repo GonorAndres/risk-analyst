@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 7 Projects $\cdot$ 105 Tests $\cdot$ 12{,}000+ Lines of Production Code}
+    {\normalsize\sffamily 8 Projects $\cdot$ 118 Tests $\cdot$ 14{,}000+ Lines of Production Code}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -416,6 +416,57 @@ The regression-based transmission model estimates these sensitivities from histo
 \newpage
 
 %% ============================================================================
+\section*{Project 08 --- Deep Hedging}
+%% ============================================================================
+
+\begin{problembox}
+Black-Scholes delta hedging is optimal only under unrealistic assumptions: constant volatility, no transaction costs, continuous rebalancing.
+In practice, every rebalance incurs costs, volatility is stochastic, and exotic instruments have no clean analytical Greeks.
+We need a hedging strategy that accounts for all these frictions simultaneously.
+\end{problembox}
+
+\begin{answerbox}
+We train a neural network to learn the optimal hedging policy directly from simulated data, minimizing the CVaR of hedging P\&L (the average loss in the worst 5\% of outcomes).
+The network takes as input the current stock price, time to maturity, and current hedge position, and outputs the optimal hedge ratio at each time step.
+With transaction costs, it learns a ``no-trade zone'' --- avoiding costly rebalancing when the benefit is small.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p08_pnl_comparison.png}
+    \caption{Hedging P\&L distributions: no hedge (gray), BS delta (blue), and deep hedge (red). Delta hedging dramatically narrows the distribution; deep hedging further reduces tail losses by avoiding unnecessary trades.}
+\end{figure}
+
+\begin{interpbox}
+\textbf{No hedge} (gray): The writer is fully exposed to the option payoff. The P\&L distribution is wide, with potentially large losses.
+
+\textbf{BS delta hedge} (blue): Dynamic hedging concentrates the P\&L around zero, but residual risk remains from discrete rebalancing and transaction costs. The dashed blue line marks the 5th percentile (VaR).
+
+\textbf{Deep hedge} (red): The neural network learns to trade less aggressively near the money, reducing transaction costs while maintaining similar hedging quality. The key insight: with costs, hedging less frequently in certain regions \emph{improves} risk-adjusted performance.
+
+The CVaR comparison quantifies the tail improvement: deep hedging reduces the average loss in the worst 5\% of scenarios compared to mechanical delta hedging.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p08_hedge_ratio.png}
+    \caption{Hedge ratio as a function of stock price at $t = T/2$. The deep hedge (red dashed) broadly follows the BS delta (blue) but deviates near the strike, creating a no-trade zone that reduces transaction costs.}
+\end{figure}
+
+\begin{interpbox}
+The \textbf{BS delta} (blue) is the theoretically optimal hedge ratio without transaction costs --- a smooth sigmoid from 0 (deep OTM) to 1 (deep ITM).
+
+The \textbf{deep hedge} (red dashed) tracks BS delta closely in the wings but deviates near the strike price (around \$100).
+This is the \textbf{no-trade zone}: near the money, delta changes rapidly with price, so mechanical rebalancing generates high transaction costs.
+The network learns to tolerate small deviations from the theoretical delta, trading off hedging precision for lower costs.
+
+This behavior mirrors the Leland (1985) adjusted volatility framework, but the network discovers it \emph{from data} without being told the theory.
+For exotic options with no analytical Greeks, this approach is the only practical path to optimal hedging.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -431,8 +482,9 @@ The regression-based transmission model estimates these sensitivities from histo
 05 & EVT for Tail Risk            & 12 & GEV/GPD fitting, threshold selection, return levels \\
 06 & Copula Dependency            & 12 & 5 copula families, PIT, joint simulation \\
 07 & Stress Testing               & 14 & DFAST, historical replay, reverse stress testing \\
+08 & Deep Hedging                 & 13 & Neural network hedging, CVaR optimization \\
 \addlinespace
-   & \textbf{Total}               & \textbf{105} & \textbf{12{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{118} & \textbf{14{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

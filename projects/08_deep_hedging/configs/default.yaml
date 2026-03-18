@@ -1,0 +1,26 @@
+option:
+  s0: 100.0
+  K: 100.0
+  r: 0.05
+  sigma: 0.20
+  T: 0.08333  # 1 month = 1/12
+  n_steps: 21  # daily for ~1 month
+
+simulation:
+  n_paths_train: 5000
+  n_paths_test: 2000
+
+network:
+  layer_sizes: [3, 32, 32, 1]  # input: [S/S0, t/T, position], output: delta
+
+training:
+  n_epochs: 100
+  population_size: 50
+  lr: 0.02
+  risk_measure: "cvar"
+  cvar_alpha: 0.95
+
+transaction_cost:
+  rate: 0.001  # 10 bps per trade
+
+random_seed: 42

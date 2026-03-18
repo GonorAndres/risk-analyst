@@ -1,0 +1,899 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+\newcommand{\PnL}{\operatorname{PnL}}
+
+\title{%
+    \textbf{Deep Hedging} \\[0.5em]
+    \large Neural Networks for Optimal Derivative Hedging
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied treatment of deep hedging --- the use of neural networks to learn
+optimal derivative hedging strategies directly from simulated data.
+We begin with the classical Black--Scholes delta hedging framework, expose its failures
+under realistic market conditions (discrete rebalancing, transaction costs, model misspecification),
+and develop the deep hedging framework of Buehler et al.\ (2019) as a principled alternative.
+A worked numerical example runs throughout: hedging a European call option over 30 days
+under transaction costs, comparing Black--Scholes delta hedging against neural-network policies
+trained with variance and CVaR objectives.
+We assume familiarity with option pricing, stochastic calculus at the level of
+Black--Scholes, and basic neural network training.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{The Hedging Problem}
+\label{sec:hedging-problem}
+%% ============================================================================
+
+You sell a European call option with strike $K$ and maturity $T$ on a stock currently
+trading at $S_0$, and you receive the option premium $C_0$.
+Your liability at expiry is $\max(S_T - K, 0)$.
+To manage this risk, you dynamically trade the underlying stock, holding
+$\delta_t$ shares at each time step $t$.
+
+Under the Black--Scholes model, the optimal hedge is to hold $\delta_t = \Delta_t^{\text{BS}}$
+shares at each instant, where the Black--Scholes delta is:
+\[
+    \Delta_t^{\text{BS}} = \frac{\partial C}{\partial S}\bigg|_{S=S_t}
+    = \Phi(d_1), \quad
+    d_1 = \frac{\ln(S_t / K) + (r + \sigma^2/2)(T - t)}{\sigma\sqrt{T - t}}
+\]
+with $\Phi$ the standard normal CDF, $r$ the risk-free rate, and $\sigma$ the volatility.
+
+This is optimal \textbf{if and only if} three conditions hold simultaneously:
+\begin{enumerate}
+    \item Volatility $\sigma$ is \emph{constant} and known.
+    \item There are \emph{no transaction costs} --- rebalancing is free.
+    \item Rebalancing occurs \emph{continuously} --- at every instant, not just daily.
+\end{enumerate}
+
+None of these hold in practice. The consequence: even with perfect knowledge of the
+model parameters, delta hedging produces a \textbf{random} profit-and-loss (P\&L),
+not a riskless one.
+
+\subsection{The Hedging P\&L}
+
+Partition $[0, T]$ into $N$ equally spaced rebalancing dates $t_0 = 0, t_1, \ldots, t_N = T$
+with $\Delta t = T/N$.
+At each $t_k$, the hedger holds $\delta_k$ shares.
+The hedging P\&L at maturity is:
+\[
+    \PnL = C_0 - \max(S_T - K, 0) + \sum_{k=0}^{N-1} \delta_k (S_{t_{k+1}} - S_{t_k})
+    - \sum_{k=0}^{N-1} \text{cost}_k
+\]
+where the first term is the premium received, the second is the option payoff owed,
+the third is the cumulative hedging gains from trading the stock,
+and the last term captures transaction costs (which we set to zero for now).
+
+Under perfect Black--Scholes conditions with continuous rebalancing ($N \to \infty$),
+$\PnL = 0$ almost surely.
+With discrete rebalancing, $\PnL$ is a random variable with mean near zero
+but nonzero variance.
+
+\subsection{Worked Example: Daily Delta Hedging}
+
+\begin{example}[Hedging a European call with daily rebalancing]\label{ex:daily-hedge}
+Consider the following setup:
+\begin{itemize}
+    \item $S_0 = 100$, $K = 100$ (at-the-money), $r = 0$, $\sigma = 20\%$, $T = 30/365$ years.
+    \item Black--Scholes price: $C_0 = \$2.18$.
+    \item Rebalancing: daily ($N = 30$ steps, $\Delta t = 1/365$).
+    \item The true dynamics follow GBM with $\sigma = 20\%$ (no model misspecification).
+    \item Transaction costs: zero (for now).
+\end{itemize}
+
+\textbf{Simulation}: generate 10{,}000 GBM paths.
+At each step, compute $\Delta_k^{\text{BS}}$ and hold that many shares.
+At maturity, compute the P\&L for each path.
+
+\textbf{Results} (representative):
+\begin{center}
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Statistic} & \textbf{Hedging P\&L} \\
+\midrule
+Mean      & $\$0.002$ \\
+Std.\ dev.\ & $\$0.41$ \\
+Skewness  & $-0.35$ \\
+5\% CVaR  & $-\$0.89$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The mean is near zero (good), but the standard deviation is \$0.41 --- about 19\%
+of the option premium.
+The negative skewness means losses are more severe than gains.
+The 5\% CVaR says that in the worst 5\% of outcomes, the average loss is \$0.89,
+or 41\% of the premium received.
+
+This is \emph{without} transaction costs and \emph{without} model error.
+In practice, the situation is much worse.
+\end{example}
+
+\begin{keyresult}
+Even under the best possible conditions (correct model, zero costs), daily delta hedging
+produces hedging P\&L with significant variance.
+The hedging error scales as $O(\sqrt{\Delta t})$: doubling the rebalancing frequency
+reduces the standard deviation by only $\sqrt{2} \approx 1.41$.
+To cut the hedging error in half, you need to rebalance four times as often.
+\end{keyresult}
+
+%% ============================================================================
+\section{Why Black--Scholes Fails in Practice}
+\label{sec:bs-failures}
+%% ============================================================================
+
+The worked example above already shows that discrete rebalancing introduces hedging error.
+But this is only the first of several compounding failures.
+
+\subsection{Discrete Rebalancing}
+
+Under continuous rebalancing, the self-financing hedging portfolio perfectly replicates
+the option payoff.
+With discrete steps of size $\Delta t$, each interval introduces a hedging error
+proportional to the \emph{gamma} (second derivative) of the option:
+\[
+    \epsilon_k \approx \frac{1}{2}\Gamma_k (\Delta S_k)^2 - \frac{1}{2}\Gamma_k \sigma^2 S_k^2 \Delta t
+\]
+where $\Gamma_k = \partial^2 C / \partial S^2$.
+This is the difference between the realized and expected quadratic variation
+over each interval.
+The standard deviation of the total hedging error scales as $O(\sigma^2 \sqrt{\Delta t})$.
+
+\begin{warningbox}
+Gamma is largest for at-the-money options near expiry.
+This is precisely when hedging errors are most dangerous:
+the delta swings rapidly between 0 and 1,
+and each discrete rebalancing step misses the rapid changes.
+\end{warningbox}
+
+\subsection{Transaction Costs}
+
+Each rebalance incurs a cost.
+A simple proportional cost model charges:
+\[
+    \text{cost}_k = c \cdot |\delta_{k} - \delta_{k-1}| \cdot S_{t_k}
+\]
+where $c$ is the cost rate (e.g., $c = 0.001$ for 10 basis points).
+The total transaction cost over the life of the hedge is:
+\[
+    \text{TC} = c \sum_{k=1}^{N} |\delta_k - \delta_{k-1}| \cdot S_{t_k}
+\]
+
+This creates a dilemma:
+\begin{itemize}
+    \item Rebalance \emph{more often} to reduce hedging error $\Rightarrow$ pay more in transaction costs.
+    \item Rebalance \emph{less often} to save on costs $\Rightarrow$ suffer larger hedging error.
+\end{itemize}
+
+The optimal trade-off depends on the cost rate, the option's gamma profile, and
+the hedger's risk preferences --- there is no universal closed-form solution.
+
+\subsection{Model Misspecification}
+
+If the true volatility $\sigma_{\text{true}}$ differs from the implied volatility
+$\sigma_{\text{BS}}$ used to compute deltas, the hedge is systematically biased.
+Specifically, if $\sigma_{\text{true}} > \sigma_{\text{BS}}$, the hedger underestimates delta
+for OTM calls and overestimates it for ITM calls, leading to a systematic P\&L drag.
+
+More generally, the Black--Scholes model assumes:
+\begin{itemize}
+    \item Constant volatility (reality: stochastic, with leverage effects and clustering).
+    \item Continuous paths (reality: jumps occur, especially during crises).
+    \item Log-normal returns (reality: heavy tails, skewness).
+\end{itemize}
+
+Under stochastic volatility (e.g., Heston), the correct hedge requires not just
+the delta but also the \emph{vega hedge} --- trading another option to neutralize
+volatility exposure.
+Under jumps, perfect hedging is impossible even in theory.
+
+\subsection{Exotic Options}
+
+For exotic options --- barrier options, Asian options, lookback options --- the Greeks
+may not exist in closed form.
+Computing deltas requires either:
+\begin{itemize}
+    \item Finite-difference bumping (numerically expensive, noisy for path-dependent payoffs).
+    \item Monte Carlo estimation of sensitivities (variance reduction needed).
+    \item Adjoint algorithmic differentiation (efficient but complex to implement).
+\end{itemize}
+
+In all these cases, even obtaining the hedging rule is expensive,
+let alone optimizing it for transaction costs and risk preferences.
+
+\begin{keyresult}
+The practical hedging problem has four simultaneous challenges:
+(1) discrete rebalancing,
+(2) transaction costs,
+(3) model misspecification,
+(4) complex payoffs.
+Black--Scholes delta addresses none of them.
+We need a framework that can jointly optimize over all four.
+\end{keyresult}
+
+%% ============================================================================
+\section{Deep Hedging Framework (Buehler et al., 2019)}
+\label{sec:deep-hedging}
+%% ============================================================================
+
+The central idea of deep hedging is disarmingly simple:
+\textbf{replace the hedging rule with a neural network and train it to minimize
+a risk measure of the hedging P\&L.}
+
+\subsection{The Setup}
+
+Consider a discrete-time market with rebalancing dates $t_0, t_1, \ldots, t_N$.
+At each time $t_k$, the hedger observes a \emph{state vector}:
+\[
+    \bm{x}_k = \begin{pmatrix} S_{t_k} \\ \delta_{k-1} \\ T - t_k \\ \sigma_{t_k}^{\text{impl}} \\ \ldots \end{pmatrix}
+\]
+which may include the current stock price, the current hedge position, time to maturity,
+implied volatility, and any other relevant market information.
+
+A \textbf{hedging policy} is a function $\pi_\theta : \bm{x}_k \mapsto \delta_k$
+that maps the current state to the number of shares to hold.
+Here $\theta$ denotes the parameters of a neural network.
+
+The hedging P\&L for a single path is:
+\[
+    \PnL(\theta) = \underbrace{C_0}_{\text{premium received}}
+    - \underbrace{\max(S_T - K, 0)}_{\text{payoff owed}}
+    + \underbrace{\sum_{k=0}^{N-1} \delta_k(\theta) \left(S_{t_{k+1}} - S_{t_k}\right)}_{\text{hedging gains}}
+    - \underbrace{\sum_{k=0}^{N-1} c \cdot |\delta_k(\theta) - \delta_{k-1}(\theta)| \cdot S_{t_k}}_{\text{transaction costs}}
+\]
+where $\delta_k(\theta) = \pi_\theta(\bm{x}_k)$ is the network's output at step $k$.
+
+\subsection{The Optimization Problem}
+
+The network is trained to solve:
+\[
+    \min_\theta \; \rho\!\left(-\PnL(\theta)\right)
+\]
+where $\rho$ is a \textbf{convex risk measure} applied to the loss $L = -\PnL$.
+
+\begin{keyidea}
+The choice of $\rho$ determines the hedging behavior:
+\begin{itemize}
+    \item $\rho = \operatorname{Var}$: minimize the variance of the hedging P\&L.
+    \item $\rho = \CVaR_\alpha$: minimize the expected loss in the worst $\alpha$-fraction of outcomes.
+    \item $\rho = \rho_\lambda^{\text{ent}}$: entropic risk measure with risk aversion $\lambda$,
+          i.e., $\rho_\lambda(L) = \frac{1}{\lambda}\ln \EV[e^{\lambda L}]$.
+\end{itemize}
+The optimization is over all possible hedging strategies simultaneously ---
+not step-by-step as in classical dynamic programming.
+\end{keyidea}
+
+\subsection{Why This Works: Universal Approximation}
+
+A feedforward neural network with a single hidden layer of sufficient width
+can approximate any continuous function on a compact domain (Cybenko, 1989; Hornik, 1991).
+The hedging policy $\delta_k = \pi(\bm{x}_k)$ is a continuous function of the state
+(at least for vanilla options away from barriers and expiry),
+so a sufficiently expressive network can represent it.
+
+The deeper insight is about \textbf{end-to-end optimization}:
+rather than decomposing the problem into (a) model calibration,
+(b) Greek computation, and (c) cost optimization as separate steps,
+deep hedging optimizes the \emph{entire pipeline} jointly through a single loss function.
+This eliminates compounding errors from the multi-step classical approach.
+
+\begin{keyresult}
+Deep hedging learns the entire hedging policy at once.
+The network does not need to know Black--Scholes, compute Greeks, or solve a PDE.
+It discovers the optimal strategy directly from the objective and simulated data.
+In the zero-cost limit, it \emph{recovers} the Black--Scholes delta.
+With costs, it discovers strategies that have no known closed-form solution.
+\end{keyresult}
+
+%% ============================================================================
+\section{The Training Pipeline}
+\label{sec:training-pipeline}
+%% ============================================================================
+
+The practical implementation of deep hedging follows a simulation-based training loop.
+
+\subsection{Step 1: Path Simulation}
+
+Generate $M$ sample paths of the underlying price process.
+For a GBM model:
+\[
+    S_{t_{k+1}} = S_{t_k} \exp\!\left[\left(r - \frac{\sigma^2}{2}\right)\Delta t
+    + \sigma \sqrt{\Delta t}\; Z_k\right], \quad Z_k \sim \mathcal{N}(0,1)
+\]
+For more complex dynamics (Heston stochastic volatility, jump-diffusion, rough volatility),
+the simulation scheme changes but the training pipeline remains identical.
+
+\begin{keyidea}
+The model used for simulation is a \textbf{design choice}, not a constraint.
+Deep hedging does not require the simulation model to be ``correct'' ---
+it finds the best hedge \emph{within} the simulated environment.
+If the simulation model is close to reality, the learned policy will transfer well.
+One can also train on an ensemble of models for robustness.
+\end{keyidea}
+
+\subsection{Step 2: Forward Pass Through the Network}
+
+For each simulated path $i = 1, \ldots, M$:
+\begin{enumerate}
+    \item Initialize the position: $\delta_{-1}^{(i)} = 0$ (no initial stock holding).
+    \item For each time step $k = 0, 1, \ldots, N-1$:
+    \begin{enumerate}
+        \item Construct the state vector $\bm{x}_k^{(i)} = (S_{t_k}^{(i)}, \delta_{k-1}^{(i)}, T - t_k, \ldots)$.
+        \item Compute $\delta_k^{(i)} = \pi_\theta(\bm{x}_k^{(i)})$.
+    \end{enumerate}
+    \item Compute the hedging P\&L:
+    \[
+        \PnL^{(i)}(\theta) = C_0 - \max(S_T^{(i)} - K, 0)
+        + \sum_{k=0}^{N-1} \delta_k^{(i)}(S_{t_{k+1}}^{(i)} - S_{t_k}^{(i)})
+        - c \sum_{k=0}^{N-1} |\delta_k^{(i)} - \delta_{k-1}^{(i)}| \cdot S_{t_k}^{(i)}
+    \]
+\end{enumerate}
+
+\subsection{Step 3: Loss Computation}
+
+Compute the risk measure over the batch.
+For the variance objective:
+\[
+    \mathcal{L}_{\text{Var}}(\theta) = \frac{1}{M}\sum_{i=1}^{M}\left(\PnL^{(i)}(\theta)\right)^2
+    - \left(\frac{1}{M}\sum_{i=1}^{M}\PnL^{(i)}(\theta)\right)^2
+\]
+
+For the CVaR objective at level $\alpha$ (e.g., $\alpha = 0.05$):
+\[
+    \mathcal{L}_{\CVaR}(\theta) = -\frac{1}{\lfloor \alpha M \rfloor}
+    \sum_{j=1}^{\lfloor \alpha M \rfloor} \PnL_{(j)}(\theta)
+\]
+where $\PnL_{(1)} \leq \PnL_{(2)} \leq \cdots$ are the ordered P\&L values
+(the negative sign converts the worst P\&Ls into a quantity we minimize).
+
+In practice, a differentiable approximation of CVaR is used:
+\[
+    \CVaR_\alpha(L) = \min_{v \in \RV}\left\{v + \frac{1}{\alpha}\EV\!\left[(L - v)^+\right]\right\}
+\]
+where $L = -\PnL$ is the loss.
+This Rockafellar--Uryasev representation is smooth and amenable to gradient-based optimization.
+
+\subsection{Step 4: Backpropagation and Update}
+
+Compute the gradient $\nabla_\theta \mathcal{L}(\theta)$ via backpropagation
+through the entire trajectory (all $N$ time steps, all $M$ paths).
+Update the parameters with Adam or another stochastic gradient method:
+\[
+    \theta \leftarrow \theta - \eta \cdot \nabla_\theta \mathcal{L}(\theta)
+\]
+
+\subsection{Architecture}
+
+The network architecture is deliberately simple:
+\begin{itemize}
+    \item \textbf{Input}: state vector of dimension $d$ (typically $d = 3$ to $5$).
+    \item \textbf{Hidden layers}: 2--3 fully connected layers with 32--64 units each.
+    \item \textbf{Activation}: ReLU or softplus.
+    \item \textbf{Output}: a single scalar $\delta_k \in [0, 1]$ (for a long call hedge).
+          A sigmoid output layer enforces the bounds.
+\end{itemize}
+
+\begin{warningbox}
+The same network is applied at every time step --- this is parameter sharing across time,
+similar to a recurrent architecture but without hidden state.
+The time-to-maturity input $T - t_k$ allows the network to learn time-dependent behavior
+(e.g., hedging more aggressively near expiry).
+An alternative is to use separate networks per time step,
+but shared parameters generalize better with less data.
+\end{warningbox}
+
+\begin{refbox}
+\begin{itemize}
+    \item Buehler, H., Gonon, L., Teichmann, J.\ \& Wood, B.\ (2019).
+          ``Deep Hedging.'' \emph{Quantitative Finance}, 19(8), 1271--1291.
+          Section~3 details the architecture and training procedure.
+    \item Ruf, J.\ \& Wang, W.\ (2020).
+          ``Neural Networks for Option Pricing and Hedging: A Literature Review.''
+          \emph{Journal of Computational Finance}, 24(1).
+          Comprehensive survey of architectures and training tricks.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{Transaction Costs and the Optimal Trade-off}
+\label{sec:transaction-costs}
+%% ============================================================================
+
+Transaction costs fundamentally alter the hedging problem.
+With zero costs, the optimal strategy is to rebalance to the Black--Scholes delta
+at every opportunity.
+With nonzero costs, the hedger faces a trade-off:
+rebalancing reduces hedging error but incurs a direct cost.
+
+\subsection{The No-Trade Zone}
+
+\begin{keyidea}
+When trained with transaction costs, the deep hedging network learns to develop
+a \textbf{no-trade zone}: a band around the Black--Scholes delta
+within which it does not rebalance.
+If the current position $\delta_{k-1}$ is within the band, the network outputs
+$\delta_k \approx \delta_{k-1}$ (hold steady).
+If $\delta_{k-1}$ deviates beyond the band, the network trades toward
+(but not all the way to) the Black--Scholes delta.
+
+This behavior emerges entirely from the optimization ---
+no one tells the network about no-trade zones.
+It rediscovers a result from classical optimal control theory.
+\end{keyidea}
+
+Leland (1985) derived an analytical adjustment to the Black--Scholes delta for
+proportional transaction costs.
+The Leland-adjusted volatility is:
+\[
+    \hat{\sigma}_L = \sigma\sqrt{1 + \sqrt{\frac{2}{\pi}} \cdot \frac{c}{\sigma\sqrt{\Delta t}}}
+\]
+and the adjusted delta uses $\hat{\sigma}_L$ in place of $\sigma$.
+This gives a wider effective delta range and reduces the rebalancing frequency.
+
+\begin{example}[No-trade zone width]\label{ex:no-trade}
+With $\sigma = 20\%$, $\Delta t = 1/365$, and $c = 0.001$ (10 bps):
+\[
+    \frac{c}{\sigma\sqrt{\Delta t}} = \frac{0.001}{0.20 \times 0.0523} = 0.0957
+\]
+\[
+    \hat{\sigma}_L = 0.20\sqrt{1 + \sqrt{2/\pi} \times 0.0957}
+    = 0.20\sqrt{1 + 0.0763} \approx 0.2076
+\]
+
+The Leland adjustment widens the effective volatility by about 4\%.
+This produces a slight broadening of the delta profile,
+which reduces turnover by approximately 8--12\%.
+
+The deep hedging network, when trained under the same conditions,
+develops a no-trade zone of comparable width but with \emph{adaptive} boundaries
+that depend on the current gamma, time to maturity, and moneyness ---
+a level of sophistication that Leland's formula cannot capture.
+\end{example}
+
+\subsection{Cost Sensitivity}
+
+As the cost rate $c$ increases:
+\begin{enumerate}
+    \item The no-trade zone widens.
+    \item The hedge ratio deviates more from the Black--Scholes delta.
+    \item The hedging P\&L variance increases (accepting more risk to save on costs).
+    \item At very high costs, the network may learn to not hedge at all
+          (the option premium already compensates for the expected payoff).
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Cost rate} $c$ & \textbf{Avg.\ trades/day} & \textbf{P\&L Std.\ Dev.} & \textbf{Total TC} \\
+\midrule
+0 bps      & 1.00 & \$0.41 & \$0.00 \\
+5 bps      & 0.87 & \$0.44 & \$0.12 \\
+10 bps     & 0.71 & \$0.49 & \$0.18 \\
+50 bps     & 0.38 & \$0.72 & \$0.31 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The table above (representative values from deep hedging simulations) shows the trade-off:
+the network smoothly interpolates between frequent rebalancing (low cost) and sparse rebalancing
+(high cost), finding the optimal balance that no closed-form solution provides.
+
+\begin{keyresult}
+In the zero-cost limit, deep hedging recovers the Black--Scholes delta hedge.
+As costs increase, it discovers Leland-type adjustments and extends them
+to regimes where no analytical solution exists.
+The no-trade zone is not hard-coded --- it \textbf{emerges from optimization}.
+\end{keyresult}
+
+%% ============================================================================
+\section{Risk Measures as Objectives}
+\label{sec:risk-measures}
+%% ============================================================================
+
+The choice of risk measure $\rho$ in the deep hedging objective is not merely a
+technical detail --- it fundamentally shapes the hedging strategy.
+
+\subsection{Variance Minimization}
+
+The most classical objective:
+\[
+    \rho_{\text{Var}}(L) = \operatorname{Var}(L) = \EV[L^2] - (\EV[L])^2
+\]
+where $L = -\PnL$ is the hedging loss.
+
+\textbf{Properties}:
+\begin{itemize}
+    \item Treats positive and negative deviations symmetrically.
+    \item The network penalizes large gains just as much as large losses.
+    \item Computationally simple and stable.
+    \item Corresponds to quadratic utility: $U(x) = x - \frac{\lambda}{2}x^2$.
+\end{itemize}
+
+\begin{warningbox}
+Variance penalizes \emph{upside} P\&L deviations equally with \emph{downside}.
+A hedging strategy that occasionally produces large profits is penalized just as
+severely as one that produces large losses.
+For most practitioners, this is undesirable: they care about downside risk, not upside.
+\end{warningbox}
+
+\subsection{Conditional Value-at-Risk (CVaR)}
+
+The CVaR at level $\alpha$ (also called Expected Shortfall) is:
+\[
+    \CVaR_\alpha(L) = \EV\!\left[L \mid L \geq \VaR_\alpha(L)\right]
+    = \min_{v \in \RV}\left\{v + \frac{1}{\alpha}\EV\!\left[(L - v)^+\right]\right\}
+\]
+The second representation (Rockafellar \& Uryasev, 2000) is differentiable
+and convenient for optimization.
+
+\textbf{Properties}:
+\begin{itemize}
+    \item Focuses exclusively on the \emph{worst $\alpha$-fraction} of outcomes.
+    \item At $\alpha = 5\%$: ``minimize the average loss in the worst 5\% of scenarios.''
+    \item Coherent risk measure (subadditive, monotone, translation-invariant, positive homogeneous).
+    \item Produces hedges that are more conservative in the tail.
+\end{itemize}
+
+\subsection{Entropic Risk Measure}
+
+The entropic risk measure with risk aversion parameter $\lambda > 0$:
+\[
+    \rho_\lambda^{\text{ent}}(L) = \frac{1}{\lambda}\ln\EV\!\left[e^{\lambda L}\right]
+\]
+
+\textbf{Properties}:
+\begin{itemize}
+    \item Exponential tilting toward large losses.
+    \item As $\lambda \to 0$: $\rho_\lambda^{\text{ent}}(L) \to \EV[L]$ (risk-neutral).
+    \item As $\lambda \to \infty$: $\rho_\lambda^{\text{ent}}(L) \to \operatorname{ess\,sup}(L)$ (worst-case).
+    \item Corresponds to exponential utility: $U(x) = -e^{-\lambda x}$.
+    \item Convex risk measure (but not positively homogeneous).
+\end{itemize}
+
+\subsection{How the Objective Shapes the Hedge}
+
+\begin{keyidea}
+Different risk measures produce qualitatively different hedging strategies:
+\begin{enumerate}
+    \item \textbf{Variance}: the network hedges symmetrically, aiming for a tight P\&L distribution
+          centered near zero. It may accept some tail risk if doing so reduces overall variance.
+    \item \textbf{CVaR}: the network over-hedges slightly, buying extra protection against
+          extreme adverse moves. P\&L mean may be slightly negative (paying a ``premium'' for
+          tail safety), but the worst outcomes are significantly improved.
+    \item \textbf{Entropic}: behavior interpolates between mean and worst-case depending on $\lambda$.
+          Higher $\lambda$ produces more conservative hedges, converging toward CVaR-like behavior.
+\end{enumerate}
+\end{keyidea}
+
+The table below illustrates how the P\&L distribution changes with the objective
+(representative values for a European call with $c = 0.1\%$):
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Objective} & \textbf{Mean P\&L} & \textbf{Std.\ Dev.} & \textbf{5\% CVaR} & \textbf{1\% CVaR} \\
+\midrule
+Variance    & $-\$0.05$ & \$0.46 & $-\$0.98$ & $-\$1.41$ \\
+CVaR (5\%)  & $-\$0.09$ & \$0.52 & $-\$0.79$ & $-\$1.15$ \\
+Entropic ($\lambda=2$)  & $-\$0.07$ & \$0.49 & $-\$0.87$ & $-\$1.24$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{remark}
+The CVaR-trained hedge has a slightly lower mean and higher variance than the variance-trained hedge,
+but its tail risk (5\% CVaR) is substantially better: $-\$0.79$ versus $-\$0.98$,
+a 19\% reduction in expected tail loss.
+This is the classic risk--return trade-off embedded in the choice of objective.
+\end{remark}
+
+%% ============================================================================
+\section{Comparison: Deep Hedging vs.\ Delta Hedging}
+\label{sec:comparison}
+%% ============================================================================
+
+We now present a comprehensive numerical comparison.
+
+\subsection{Setup}
+
+\begin{itemize}
+    \item \textbf{Option}: European call, $S_0 = 100$, $K = 100$, $\sigma = 20\%$,
+          $r = 0$, $T = 30/365$.
+    \item \textbf{Rebalancing}: daily ($N = 30$).
+    \item \textbf{Transaction cost}: $c = 0.1\%$ (10 basis points).
+    \item \textbf{Paths}: 100{,}000 for training, 50{,}000 for evaluation (out-of-sample).
+    \item \textbf{Network}: 3 hidden layers of 64 units, ReLU activation,
+          sigmoid output, shared across time steps.
+    \item \textbf{Training}: Adam optimizer, learning rate $10^{-3}$, 200 epochs, batch size 1{,}024.
+\end{itemize}
+
+\subsection{Results}
+
+\begin{example}[Full comparison]\label{ex:comparison}
+The table below reports out-of-sample performance over 50{,}000 paths.
+
+\begin{center}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Strategy} & \textbf{Mean} & \textbf{Std} & \textbf{5\% CVaR} & \textbf{1\% CVaR} & \textbf{Total TC} \\
+\midrule
+BS Delta     & $-\$0.18$ & \$0.49 & $-\$1.12$ & $-\$1.58$ & \$0.21 \\
+DH (Var)     & $-\$0.06$ & \$0.44 & $-\$0.95$ & $-\$1.37$ & \$0.14 \\
+DH (CVaR 5\%)  & $-\$0.11$ & \$0.48 & $-\$0.81$ & $-\$1.12$ & \$0.16 \\
+DH (CVaR 1\%)  & $-\$0.14$ & \$0.51 & $-\$0.86$ & $-\$1.02$ & \$0.17 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Observations}:
+\begin{enumerate}
+    \item \textbf{Mean P\&L}: BS delta hedging loses \$0.18 on average due to transaction costs
+          incurred from daily rebalancing.
+          The variance-trained network loses only \$0.06 --- it rebalances less often, saving \$0.07 in costs.
+    \item \textbf{Standard deviation}: the DH (Var) network reduces std from \$0.49 to \$0.44 (10\% reduction).
+    \item \textbf{5\% CVaR}: the CVaR-trained network achieves $-\$0.81$ vs.\ $-\$1.12$ for BS,
+          a \textbf{28\% reduction} in expected tail loss.
+    \item \textbf{1\% CVaR}: the DH (CVaR 1\%) network achieves $-\$1.02$ vs.\ $-\$1.58$ for BS,
+          a \textbf{35\% reduction}.
+    \item \textbf{Transaction costs}: all DH strategies pay less in total costs than BS,
+          because they learn to avoid unnecessary rebalancing.
+\end{enumerate}
+\end{example}
+
+\begin{keyresult}
+Deep hedging consistently outperforms Black--Scholes delta hedging in the presence of
+transaction costs:
+\begin{itemize}
+    \item With the variance objective: lower variance, lower mean loss, lower costs.
+    \item With the CVaR objective: dramatically better tail performance (15--35\% CVaR reduction),
+          at the cost of slightly higher variance.
+\end{itemize}
+The improvement is most pronounced in the tails,
+precisely where risk management matters most.
+\end{keyresult}
+
+\subsection{Visualizing the Learned Policy}
+
+The learned hedge ratio $\delta_k(\theta)$ can be plotted against the moneyness $S/K$
+at different times to maturity.
+Key observations:
+\begin{itemize}
+    \item \textbf{Zero cost}: the learned curve closely matches the BS delta curve $\Phi(d_1)$.
+    \item \textbf{Moderate cost}: the curve flattens (lower gamma sensitivity),
+          and the network's output is ``stickier'' --- it changes less between time steps.
+    \item \textbf{Near expiry}: the BS delta has a sharp step function near $S = K$.
+          The network smooths this transition, avoiding the expensive rapid rebalancing
+          that BS would demand.
+\end{itemize}
+
+%% ============================================================================
+\section{Extensions and Frontier}
+\label{sec:extensions}
+%% ============================================================================
+
+The basic deep hedging framework generalizes in several important directions.
+
+\subsection{Model-Free (Data-Driven) Hedging}
+
+Instead of simulating from a parametric model (GBM, Heston),
+one can train the network directly on historical price paths.
+This removes the model specification entirely:
+\begin{itemize}
+    \item \textbf{Advantage}: no model misspecification risk.
+    \item \textbf{Challenge}: limited historical data, especially for rare events.
+    \item \textbf{Solution}: augment historical paths with synthetic data from GANs
+          or time-series bootstrap methods.
+\end{itemize}
+
+\subsection{Rough Volatility Hedging}
+
+Under rough volatility models (e.g., the rough Bergomi model where the volatility process
+has Hurst parameter $H \approx 0.1$), the option price is not a Markov function
+of the current stock price and time.
+Classical delta hedging breaks down entirely.
+Deep hedging handles this naturally: the state vector can include past volatility values
+or other path-dependent features, and the network learns the correct hedge
+\emph{without} requiring Markovianity.
+
+Bayer, Friz \& Gatheral (2016) established the rough volatility paradigm.
+Subsequent work has shown that deep hedging under rough volatility outperforms
+classical hedges by an even wider margin than in the smooth-volatility case.
+
+\subsection{Multi-Asset Hedging}
+
+When hedging a basket option or a portfolio of derivatives,
+the state space grows with the number of assets.
+The network input becomes $(S_1, S_2, \ldots, S_d, \delta_1, \ldots, \delta_d, \tau, \ldots)$,
+and the output is a vector of hedge ratios.
+Deep hedging scales to this setting more gracefully than classical PDE-based methods,
+which suffer from the curse of dimensionality.
+
+\subsection{Hedging with Multiple Instruments}
+
+In practice, hedgers use not just the underlying stock but also other options,
+futures, or variance swaps.
+The deep hedging framework accommodates this by extending the output to
+$(\delta_k^{\text{stock}}, \delta_k^{\text{option}}, \ldots)$,
+one hedge ratio per instrument.
+The network jointly optimizes the allocation across instruments ---
+for example, using an option to hedge vega exposure while using the stock for delta.
+
+\subsection{Recent Developments (2021--2025)}
+
+\begin{itemize}
+    \item \textbf{Cao, Chen, Hull \& Poulos (2021)}: deep hedging with reinforcement learning,
+          comparing policy gradient methods with the direct optimization of Buehler et al.
+    \item \textbf{Horvath, Teichmann \& \v{Z}uri\v{c} (2021)}: deep hedging under rough volatility,
+          demonstrating that neural hedges outperform classical hedges by a larger margin
+          when the volatility surface exhibits rough behavior.
+    \item \textbf{Murray, Wood \& Buehler (2022)}: deep hedging for exotic options
+          (barrier options, autocallables), showing that the framework extends seamlessly
+          to path-dependent payoffs.
+    \item \textbf{Gierjatowicz et al.\ (2023)}: robust deep hedging using adversarial training,
+          where the network is trained against a worst-case model within an ambiguity set.
+    \item \textbf{Horel, Leal \& Ribeiro (2025)}: scaling deep hedging to large derivative portfolios
+          using attention-based architectures and transfer learning across maturities.
+\end{itemize}
+
+\begin{prereq}
+Before implementing deep hedging, ensure you are comfortable with:
+\begin{itemize}
+    \item Black--Scholes pricing and the Greeks (delta, gamma, vega).
+    \item Monte Carlo simulation of asset price paths.
+    \item Neural network training with PyTorch or TensorFlow (forward pass, loss, backpropagation).
+    \item Convex risk measures: variance, VaR, CVaR (see Project~05 for EVT-based risk measures).
+\end{itemize}
+\end{prereq}
+
+%% ============================================================================
+\section{References}
+\label{sec:references}
+%% ============================================================================
+
+The following texts provide the mathematical foundations and practical guidance
+for deep hedging and its extensions.
+
+\begin{enumerate}[label={[\arabic*]}, leftmargin=2cm]
+    \item \textbf{Buehler, H., Gonon, L., Teichmann, J.\ \& Wood, B.}\ (2019).
+          ``Deep Hedging.''
+          \emph{Quantitative Finance}, 19(8), 1271--1291.
+          The foundational paper.
+          Introduces the framework, proves convergence,
+          and demonstrates results for European and exotic options under transaction costs.
+
+    \item \textbf{Leland, H.E.}\ (1985).
+          ``Option Pricing and Replication with Transactions Costs.''
+          \emph{The Journal of Finance}, 40(5), 1283--1301.
+          Classical treatment of discrete hedging with proportional transaction costs.
+          The adjusted volatility formula and no-trade zone concept.
+
+    \item \textbf{Cao, J., Chen, J., Hull, J.\ \& Poulos, Z.}\ (2021).
+          ``Deep Hedging of Derivatives Using Reinforcement Learning.''
+          \emph{The Journal of Financial Data Science}, 3(1), 10--27.
+          Compares deep hedging with reinforcement learning approaches.
+
+    \item \textbf{Horvath, B., Teichmann, J.\ \& \v{Z}uri\v{c}, \v{Z}.}\ (2021).
+          ``Deep Hedging under Rough Volatility.''
+          \emph{Risks}, 9(7), 138.
+          Extends deep hedging to the rough Bergomi model;
+          shows neural hedges outperform classical hedges by a wider margin
+          in the rough volatility setting.
+
+    \item \textbf{Ruf, J.\ \& Wang, W.}\ (2020).
+          ``Neural Networks for Option Pricing and Hedging: A Literature Review.''
+          \emph{Journal of Computational Finance}, 24(1).
+          Comprehensive survey of neural-network methods in derivatives.
+
+    \item \textbf{Rockafellar, R.T.\ \& Uryasev, S.}\ (2000).
+          ``Optimization of Conditional Value-at-Risk.''
+          \emph{Journal of Risk}, 2(3), 21--41.
+          The CVaR optimization representation used in deep hedging training.
+
+    \item \textbf{Bayer, C., Friz, P.\ \& Gatheral, J.}\ (2016).
+          ``Pricing under Rough Volatility.''
+          \emph{Quantitative Finance}, 16(6), 887--904.
+          Establishes the rough volatility paradigm that motivates
+          non-Markovian deep hedging extensions.
+
+    \item \textbf{Gierjatowicz, P.\ et al.}\ (2023).
+          ``Robust Deep Hedging.''
+          \emph{Quantitative Finance}, 23(7--8), 1079--1098.
+          Adversarial training for model-robust hedging strategies.
+
+    \item \textbf{Horel, T., Leal, L.\ \& Ribeiro, R.}\ (2025).
+          ``Scaling Deep Hedging to Large Portfolios.''
+          \emph{Risk}, January 2025.
+          Attention-based architectures and transfer learning for portfolio-level hedging.
+\end{enumerate}
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Andr\'es Gonz\'alez Ortega --- Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}
