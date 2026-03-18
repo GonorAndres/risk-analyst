@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 6 Projects $\cdot$ 91 Tests $\cdot$ 10{,}000+ Lines of Production Code}
+    {\normalsize\sffamily 7 Projects $\cdot$ 105 Tests $\cdot$ 12{,}000+ Lines of Production Code}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -361,6 +361,61 @@ A risk manager using only correlation (i.e., implicitly using a Gaussian copula)
 \newpage
 
 %% ============================================================================
+\section*{Project 07 --- Stress Testing Framework}
+%% ============================================================================
+
+\begin{problembox}
+VaR and ES measure risk under ``normal'' market conditions.
+But what happens during a 2008-style financial crisis, a pandemic shock, or a sudden bank run?
+Regulators require banks to demonstrate portfolio resilience under specific adverse scenarios --- this is stress testing.
+The challenge: translating macroeconomic shocks (GDP collapse, unemployment spike) into concrete portfolio losses.
+\end{problembox}
+
+\begin{answerbox}
+We built a full stress testing framework: (1)~macro-to-portfolio transmission via OLS regression on macro factors, (2)~Fed DFAST scenario application (baseline/adverse/severely adverse), (3)~historical crisis replay (2008 GFC, COVID-2020, SVB-2023), (4)~reverse stress testing via optimization to find the minimum shock that breaches capital thresholds, and (5)~credit migration under stress.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p07_scenario_comparison.png}
+    \caption{Portfolio losses under historical crises and the DFAST severely adverse scenario. The 2008 GFC produces the largest loss due to the combination of equity collapse and credit spread blowout.}
+\end{figure}
+
+\begin{interpbox}
+Each bar represents the estimated portfolio loss if the corresponding crisis were to repeat \emph{on the current portfolio}.
+
+\textbf{2008 GFC} dominates because it combined a 50\% equity drop, 400bps credit spread widening, and 300bps rate decline --- a multi-factor shock that hits every asset class simultaneously.
+
+\textbf{COVID-2020} was severe but shorter-lived (the V-shaped recovery limited cumulative losses).
+
+\textbf{SVB-2023} was concentrated in rates and bank stocks, so its impact depends heavily on portfolio composition.
+
+\textbf{DFAST Severely Adverse} is the regulatory worst-case: it is designed to be ``plausible but extreme.'' If your portfolio survives this scenario with capital above the regulatory minimum, you pass the stress test.
+
+\textbf{Reverse stress testing} inverts the question: instead of ``how much do I lose under scenario X?'', it asks ``what is the minimum shock that makes me breach my capital ratio?'' This identifies hidden vulnerabilities that pre-defined scenarios might miss.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p07_factor_sensitivity.png}
+    \caption{Factor sensitivity: which macroeconomic variables drive the most portfolio risk. The equity index and credit spreads dominate, while GDP has a moderate positive effect.}
+\end{figure}
+
+\begin{interpbox}
+This chart answers the question: \emph{``If I could only hedge one macro risk, which one?''}
+
+The \textbf{equity index} has the largest positive beta --- when equities rise, the portfolio gains. Conversely, an equity crash is the single biggest source of loss.
+
+\textbf{Credit spreads} have a large negative beta --- widening spreads (risk-off) hurt the portfolio.
+
+\textbf{Unemployment} also has a negative relationship: rising unemployment signals economic weakness, which hits asset values.
+
+The regression-based transmission model estimates these sensitivities from historical data, then applies them to stressed macro paths. This is the same approach used by major banks for DFAST/CCAR submissions.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -375,8 +430,9 @@ A risk manager using only correlation (i.e., implicitly using a Gaussian copula)
 04 & Volatility Modeling           & 14 & GARCH family + regime-switching \\
 05 & EVT for Tail Risk            & 12 & GEV/GPD fitting, threshold selection, return levels \\
 06 & Copula Dependency            & 12 & 5 copula families, PIT, joint simulation \\
+07 & Stress Testing               & 14 & DFAST, historical replay, reverse stress testing \\
 \addlinespace
-   & \textbf{Total}               & \textbf{91} & \textbf{10{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{105} & \textbf{12{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

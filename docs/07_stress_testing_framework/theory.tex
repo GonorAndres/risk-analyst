@@ -1,0 +1,992 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+% indicator function via boldsymbol (no extra package needed)
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+\newtcolorbox{interpbox}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Interpretation},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+\newcommand{\PnL}{\operatorname{P\&L}}
+
+\title{%
+    \textbf{Stress Testing Framework} \\[0.5em]
+    \large Measuring Portfolio Resilience Under Extreme Scenarios
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied, example-driven treatment of stress testing for financial portfolios.
+We begin from the practical limitations of statistical risk measures (VaR, ES)
+that are calibrated to ``normal'' market conditions,
+and develop the three pillars of stress testing:
+historical scenario replay, hypothetical (regulatory) scenarios, and reverse stress testing.
+The Fed DFAST architecture is examined in detail,
+including the macro-to-portfolio transmission mechanism via regression-based and satellite models.
+Credit migration under stress and reverse stress testing as an optimization problem are treated
+with worked numerical examples throughout.
+The document assumes familiarity with VaR/ES (Project~03), volatility modeling (Project~04),
+and tail risk (Project~05).
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{Why Stress Testing}
+\label{sec:why-stress}
+%% ============================================================================
+
+\begin{example}[The 2008 wake-up call]\label{ex:2008-wakeup}
+In the first half of 2007, the $\VaR_{0.99}$ for a diversified portfolio of US equities
+and mortgage-backed securities was typically estimated at 2--3\% of portfolio value (daily).
+The GARCH models were calibrated to 2003--2007 data --- a period of unusually low volatility
+(the ``Great Moderation'').
+
+Between September and November 2008, daily portfolio losses of 5--8\%
+occurred on multiple occasions.
+The 99\% VaR was breached not once or twice, but \emph{dozens} of times in a single quarter.
+Models that were ``correct'' under recent history
+were catastrophically wrong under crisis conditions.
+\end{example}
+
+The failure was not that VaR or ES were computed incorrectly.
+The failure was \textbf{structural}: statistical risk measures answer the question
+``what is the worst loss under the distribution estimated from recent data?''
+They do \emph{not} answer the question
+``what happens if the world changes in a specific, adverse way?''
+
+Stress testing is the complement to statistical risk measures.
+It asks a fundamentally different question:
+
+\begin{keyidea}
+\textbf{Statistical risk measures} (VaR, ES):
+``Given the current regime, what is the $\alpha$-quantile or tail expectation of the loss distribution?''
+
+\medskip
+
+\textbf{Stress testing}:
+``Given a specific adverse scenario (whether historical or hypothetical),
+what would the portfolio lose?''
+
+\medskip
+
+The two approaches are complementary, not competing.
+VaR/ES measures the tail \emph{within} the estimated distribution.
+Stress testing evaluates losses \emph{outside} the estimated distribution ---
+under scenarios that the model may assign negligible probability to,
+but that regulators, risk managers, and history tell us can happen.
+\end{keyidea}
+
+The regulatory mandate is explicit and growing:
+
+\begin{itemize}
+    \item \textbf{Basel III/IV} (BCBS, 2018): banks must conduct regular stress tests
+          covering credit, market, and operational risk.
+          Internal stress testing is a pillar of the Internal Capital Adequacy Assessment Process (ICAAP).
+    \item \textbf{DFAST / CCAR} (US): the Dodd-Frank Act Stress Tests require
+          all bank holding companies with assets above \$100B to project losses
+          under Fed-prescribed macroeconomic scenarios.
+    \item \textbf{EBA / ECB} (EU): the European Banking Authority conducts
+          biennial EU-wide stress tests with prescribed adverse scenarios.
+    \item \textbf{PRA} (UK): the Bank of England's Prudential Regulation Authority
+          runs concurrent stress tests for major UK banks.
+\end{itemize}
+
+\begin{warningbox}
+The 2008 crisis did not just reveal that models were miscalibrated.
+It revealed a \textbf{conceptual gap}: risk management frameworks built entirely on
+statistical measures estimated from recent data will always be blind to regime shifts.
+Stress testing fills this gap by forcing institutions to evaluate losses under scenarios
+that are not in the historical sample --- or that occurred so long ago
+that statistical models have ``forgotten'' them.
+\end{warningbox}
+
+%% ============================================================================
+\section{Types of Stress Tests}
+\label{sec:types}
+%% ============================================================================
+
+Stress tests come in three broad categories, each answering a different question.
+
+\subsection{Historical Scenarios}
+
+\textbf{Approach}: take the actual market moves observed during a past crisis
+and apply them to the current portfolio.
+
+\textbf{Question answered}: ``If the 2008 GFC happened again today, what would we lose?''
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Scenarios are internally consistent (all factor moves actually co-occurred).
+    \item Easy to communicate to senior management (``this is what happened last time'').
+    \item No modeling assumptions needed --- just apply the historical factor changes.
+\end{itemize}
+
+\textbf{Limitations}:
+\begin{itemize}
+    \item The next crisis may look different from any past crisis.
+    \item The portfolio composition today may have exposures to risk factors
+          that did not exist or were not material in the historical period.
+    \item Historical scenarios are backward-looking by definition.
+\end{itemize}
+
+\subsection{Hypothetical Scenarios}
+
+\textbf{Approach}: construct a scenario from economic logic or regulatory specification,
+specifying paths for key macroeconomic variables over a projection horizon.
+
+\textbf{Question answered}: ``If GDP fell by 6\% and unemployment rose to 10\%,
+what would our portfolio lose?''
+
+\textbf{Examples}: the Fed DFAST baseline, adverse, and severely adverse scenarios;
+internal scenarios designed by a bank's economics team.
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Forward-looking: can incorporate risks that have not yet materialized.
+    \item Tailored to specific vulnerabilities of the institution.
+    \item Allows exploration of ``what if'' questions that history has not answered.
+\end{itemize}
+
+\textbf{Limitations}:
+\begin{itemize}
+    \item The scenario may be internally inconsistent
+          (e.g., GDP falls but equity markets rise --- is that plausible?).
+    \item Requires a transmission model from macro variables to portfolio losses.
+    \item Results are only as good as the transmission model.
+\end{itemize}
+
+\subsection{Reverse Stress Testing}
+
+\textbf{Approach}: instead of specifying a scenario and computing the loss,
+specify a loss threshold and find the scenario that produces it.
+
+\textbf{Question answered}: ``What scenario would cause our portfolio
+to lose enough to breach our capital ratio?''
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Identifies hidden vulnerabilities that forward stress tests may miss.
+    \item Forces the institution to think about its ``break point.''
+    \item Required by several regulators (PRA, EBA).
+\end{itemize}
+
+\textbf{Limitations}:
+\begin{itemize}
+    \item Computationally harder (inverse problem).
+    \item Multiple scenarios may produce the same loss --- which one is ``the'' answer?
+    \item Requires careful formulation of the optimization problem.
+\end{itemize}
+
+\subsection{Comparison}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}p{3cm}p{3.5cm}p{3.5cm}p{3.5cm}@{}}
+\toprule
+& \textbf{Historical} & \textbf{Hypothetical} & \textbf{Reverse} \\
+\midrule
+\textbf{Input} & Past crisis dates & Macro variable paths & Loss threshold \\
+\textbf{Output} & Portfolio loss & Portfolio loss & Scenario \\
+\textbf{Direction} & Scenario $\to$ Loss & Scenario $\to$ Loss & Loss $\to$ Scenario \\
+\textbf{Key strength} & Realism, consistency & Forward-looking & Finds blind spots \\
+\textbf{Key weakness} & Backward-looking & Model-dependent & Computational cost \\
+\textbf{Regulatory use} & Supplementary & DFAST/CCAR, EBA & PRA, ICAAP \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of the three stress testing approaches.}
+\end{table}
+
+\begin{keyresult}
+A robust stress testing framework uses \emph{all three} approaches.
+Historical scenarios provide a reality anchor.
+Hypothetical scenarios explore forward-looking risks.
+Reverse stress testing ensures no critical vulnerability is overlooked.
+The three approaches are complementary, not substitutes.
+\end{keyresult}
+
+%% ============================================================================
+\section{Fed DFAST Scenario Architecture}
+\label{sec:dfast}
+%% ============================================================================
+
+The Federal Reserve's Dodd-Frank Act Stress Tests (DFAST) provide the most structured
+example of hypothetical stress testing.
+Each year, the Fed publishes three macroeconomic scenarios,
+and covered institutions must project their capital ratios under each.
+
+\subsection{The Three Scenarios}
+
+\begin{enumerate}
+    \item \textbf{Baseline}: a ``most likely'' economic path.
+          Roughly consistent with the Blue Chip consensus forecast.
+          GDP growth $\approx$ 2\%, unemployment $\approx$ 4\%, equity indices roughly flat.
+    \item \textbf{Adverse}: a moderate recession.
+          GDP growth $\approx$ $-1$\% to $-2$\%, unemployment rises to $\approx$ 7\%,
+          equity indices decline $\approx$ 25\%, credit spreads widen moderately.
+    \item \textbf{Severely adverse}: a deep recession.
+          GDP growth $\approx$ $-6$\% to $-8$\%, unemployment rises to $\approx$ 10\%,
+          equity indices decline $\approx$ 55\%, credit spreads spike,
+          house prices fall $\approx$ 25\%.
+\end{enumerate}
+
+\subsection{Macro Variable Paths}
+
+The Fed specifies quarterly paths for 28 macroeconomic and financial variables
+over a 9-quarter (or 13-quarter) projection horizon.
+The key variables include:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Variable} & \textbf{Baseline} & \textbf{Adverse} & \textbf{Severely Adverse} & \textbf{Units} \\
+\midrule
+Real GDP growth (Y/Y) & $+2.0\%$ & $-2.0\%$ & $-6.0\%$ & \% \\
+Unemployment rate (peak) & $4.2\%$ & $7.0\%$ & $10.0\%$ & \% \\
+Dow Jones / S\&P trough & $-2\%$ & $-25\%$ & $-55\%$ & \% from current \\
+10Y Treasury yield (trough) & $3.8\%$ & $2.5\%$ & $1.0\%$ & \% \\
+BBB corporate spread (peak) & $+50$bps & $+200$bps & $+450$bps & bps \\
+House Price Index (HPI) & $+2\%$ & $-10\%$ & $-25\%$ & \% \\
+VIX (peak) & $20$ & $45$ & $70$ & index \\
+\bottomrule
+\end{tabular}
+\caption{Representative DFAST macro variable paths (stylized from recent exercises).
+Actual Fed scenarios vary year to year.}
+\end{table}
+
+\subsection{What Banks Must Do}
+
+For each scenario, covered institutions must:
+\begin{enumerate}
+    \item Project quarterly \textbf{pre-provision net revenue} (PPNR).
+    \item Project quarterly \textbf{credit losses} (provision for loan losses).
+    \item Project \textbf{trading and counterparty losses} (for firms with large trading books).
+    \item Project \textbf{operational risk losses}.
+    \item Compute \textbf{capital ratios} (CET1, Tier 1, Total Capital, Leverage)
+          at each quarter of the horizon.
+    \item Demonstrate that capital ratios stay above regulatory minimums
+          \emph{at every quarter}, not just at the end.
+\end{enumerate}
+
+\begin{warningbox}
+The DFAST severely adverse scenario is designed to be harsh but \emph{plausible}.
+It is not a ``worst case'' --- the 2008 crisis was actually more severe on some dimensions
+(e.g., the S\&P~500 fell 57\% peak-to-trough, and unemployment reached 10\%).
+The regulatory scenario is a floor, not a ceiling, for stress testing.
+Institutions are expected to run their own, potentially more severe, internal scenarios.
+\end{warningbox}
+
+\subsection{Worked Example: Severely Adverse Impact}
+
+\begin{example}[Severely adverse scenario]\label{ex:dfast-severe}
+Consider a bank with a \$50 billion loan portfolio (60\% commercial, 40\% consumer)
+and a \$10 billion trading book (equity-heavy).
+
+Under the severely adverse scenario:
+\begin{itemize}
+    \item \textbf{Credit losses}: the loan portfolio's weighted average PD increases from 1.2\%
+          (baseline) to 4.5\% (severely adverse), driven by GDP contraction and unemployment.
+          Expected credit losses: $\$50\text{B} \times (4.5\% - 1.2\%) \times 0.45 \;\text{(LGD)} \approx \$743\text{M}$.
+    \item \textbf{Trading losses}: equity index $-55\%$, credit spreads $+450$bps.
+          Estimated mark-to-market loss on the trading book: $\approx \$2.8\text{B}$.
+    \item \textbf{PPNR offset}: even under stress, the bank earns net interest income and fees.
+          Projected 9-quarter cumulative PPNR: $\approx \$1.5\text{B}$.
+    \item \textbf{Net stress loss}: $\$743\text{M} + \$2.8\text{B} - \$1.5\text{B} = \$2.04\text{B}$.
+\end{itemize}
+
+If the bank's CET1 capital is \$5.0 billion and risk-weighted assets are \$55 billion,
+the pre-stress CET1 ratio is $5.0 / 55 = 9.1\%$.
+After the stress loss: $(5.0 - 2.04) / 55 = 5.4\%$.
+The regulatory minimum CET1 ratio is 4.5\%, plus a stress capital buffer.
+The bank survives, but with minimal headroom.
+\end{example}
+
+\begin{interpbox}
+The DFAST exercise is not just a compliance exercise.
+It reveals the \textbf{capital adequacy} of the institution under severe but plausible conditions.
+A bank that barely passes the severely adverse scenario has little buffer against
+an even more severe event --- and the 2008 crisis was, on several dimensions,
+more severe than the typical DFAST scenario.
+\end{interpbox}
+
+%% ============================================================================
+\section{Macro-to-Portfolio Transmission}
+\label{sec:transmission}
+%% ============================================================================
+
+The core modeling challenge in hypothetical stress testing:
+how do macroeconomic shocks translate into portfolio losses?
+The scenario gives us $\Delta\text{GDP}$, $\Delta\text{Unemployment}$, $\Delta\text{Equity Index}$, etc.
+We need to convert these into a dollar loss for the portfolio.
+
+Two main approaches exist.
+
+\subsection{Approach 1: Regression-Based (Top-Down)}
+
+\begin{keyidea}
+\textbf{The regression approach}: regress portfolio returns (or P\&L) on macroeconomic factors
+using historical data.
+Then apply the stressed factor values to the estimated model to project losses.
+
+\medskip
+
+Let $R_t$ be the portfolio return at time $t$ and $\bm{X}_t = (X_{1,t}, \ldots, X_{k,t})^\top$
+be a vector of macro factor changes. The model is:
+\[
+    R_t = \alpha + \sum_{i=1}^{k} \beta_i \, X_{i,t} + \varepsilon_t
+\]
+
+The \textbf{stressed P\&L} is:
+\[
+    \Delta \PnL_{\text{stress}} = V \cdot \left(\hat\alpha + \sum_{i=1}^{k} \hat\beta_i \, \Delta X_{i}^{\text{stress}}\right)
+\]
+where $V$ is the portfolio value and $\Delta X_i^{\text{stress}}$ is the change in macro factor $i$
+under the stress scenario.
+\end{keyidea}
+
+\begin{example}[Regression-based transmission]\label{ex:regression}
+Fit a quarterly regression of equity portfolio returns on macro factors
+using 40 quarters (10 years) of data:
+\[
+    R_t = \alpha + \beta_1 \Delta\text{GDP}_t + \beta_2 \Delta\text{Unemp}_t
+    + \beta_3 \Delta\text{Spread}_t + \varepsilon_t
+\]
+
+Estimated coefficients (representative):
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Factor} & $\hat\beta$ & \textbf{Stressed $\Delta X$} & $\hat\beta \times \Delta X$ \\
+\midrule
+$\Delta$GDP (Y/Y, \%) & $+2.8$ & $-6.0$ & $-16.8\%$ \\
+$\Delta$Unemployment (\%) & $-3.5$ & $+5.8$ & $-20.3\%$ \\
+$\Delta$BBB Spread (bps/100) & $-8.2$ & $+4.5$ & $-36.9\%$ \\
+\midrule
+Intercept $\hat\alpha$ & \multicolumn{2}{r}{} & $+1.2\%$ \\
+\midrule
+\textbf{Total stressed return} & \multicolumn{2}{r}{} & $\mathbf{-72.8\%}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Problem}: the linear regression projects a $-72.8\%$ loss,
+which exceeds the 2008 actual equity decline of $-57\%$.
+The model extrapolates linearly beyond the range of observed data,
+and the three factor effects may overlap (multicollinearity).
+
+\textbf{Mitigation}: cap the projected loss at a historically calibrated maximum,
+use regularized regression (Ridge, Lasso), or use the satellite approach instead.
+\end{example}
+
+\begin{warningbox}
+The regression approach is simple but fragile.
+Key pitfalls:
+\begin{itemize}
+    \item \textbf{Multicollinearity}: GDP, unemployment, and credit spreads are highly correlated.
+          OLS coefficients become unstable and can have wrong signs.
+    \item \textbf{Linearity}: the true relationship between macro shocks and portfolio losses
+          is almost certainly nonlinear, especially under extreme stress.
+    \item \textbf{Extrapolation}: the stress scenario is, by design,
+          outside the range of historical data used to estimate the model.
+          Linear extrapolation can produce absurd results.
+    \item \textbf{Structural breaks}: the sensitivity of the portfolio to macro factors
+          may change over time as portfolio composition evolves.
+\end{itemize}
+\end{warningbox}
+
+\subsection{Approach 2: Satellite Models (Bottom-Up)}
+
+\begin{keyidea}
+Instead of one regression for the entire portfolio,
+build \textbf{separate models} for each component of portfolio loss,
+each driven by the relevant macro factors:
+\begin{itemize}
+    \item \textbf{PD model}: $\text{PD}_t = f_1(\text{GDP}_t, \text{Unemp}_t, \ldots)$
+    \item \textbf{LGD model}: $\text{LGD}_t = f_2(\text{HPI}_t, \text{Spread}_t, \ldots)$
+    \item \textbf{Prepayment model}: $\text{CPR}_t = f_3(\text{Rate}_t, \text{HPI}_t, \ldots)$
+    \item \textbf{Revenue model}: $\text{PPNR}_t = f_4(\text{Rate}_t, \text{GDP}_t, \ldots)$
+\end{itemize}
+Each satellite model is estimated independently, using data and features
+appropriate to the specific risk component.
+The stressed loss is assembled by feeding macro scenario paths into each model
+and aggregating.
+\end{keyidea}
+
+The satellite approach is what large banks actually use for DFAST/CCAR submissions.
+It is more granular, more defensible, and more transparent than the top-down regression.
+
+\begin{example}[Satellite PD model]\label{ex:satellite-pd}
+A logistic regression for commercial loan default probability:
+\[
+    \ln\!\left(\frac{\text{PD}_t}{1 - \text{PD}_t}\right)
+    = \gamma_0 + \gamma_1 \,\text{GDP}_t + \gamma_2 \,\text{Unemp}_t + \gamma_3 \,\text{Spread}_t
+\]
+Estimated on 80 quarters of data (20 years), with quarterly PD computed
+from the observed default rate on the bank's commercial loan portfolio.
+
+Representative estimates: $\hat\gamma_0 = -4.2$, $\hat\gamma_1 = -0.15$,
+$\hat\gamma_2 = 0.22$, $\hat\gamma_3 = 0.35$.
+
+Under the severely adverse scenario (GDP $= -6\%$, Unemp $= 10\%$, Spread $= +450$bps):
+\[
+    \text{logit}(\text{PD}_{\text{stress}}) = -4.2 + (-0.15)(-6) + 0.22(10) + 0.35(4.5) = 0.075
+\]
+\[
+    \text{PD}_{\text{stress}} = \frac{1}{1 + e^{-0.075}} \approx 51.9\%?
+\]
+
+This is clearly too high --- the issue is that the logistic model is extrapolating
+well beyond the training range.
+In practice, banks constrain PD projections using expert judgment,
+historical maximums, and model overlays.
+A more realistic stressed PD for a commercial loan portfolio would be 4--6\%,
+achieved by calibrating the model with additional controls.
+\end{example}
+
+\begin{keyresult}
+Both the regression and satellite approaches face the same fundamental challenge:
+stress scenarios are, \textbf{by construction}, outside the range of historical data.
+Any model --- linear regression, logistic regression, machine learning ---
+must extrapolate beyond its training domain.
+This is why stress testing always requires \textbf{expert judgment} as a complement to models.
+The model provides a disciplined starting point; judgment provides the guardrails.
+\end{keyresult}
+
+%% ============================================================================
+\section{Credit Migration Under Stress}
+\label{sec:migration}
+%% ============================================================================
+
+For credit portfolios, losses arise not only from outright defaults
+but from \textbf{rating downgrades} that reduce the market value of bonds and loans.
+A transition matrix describes how borrowers migrate between rating categories over time.
+
+\subsection{The Transition Matrix}
+
+\begin{definition}[Credit transition matrix]
+A $K \times K$ \textbf{transition matrix} $\bm{P} = [p_{ij}]$ where $p_{ij}$ is the probability
+that a borrower rated $i$ at time $t$ is rated $j$ at time $t+1$.
+Rows sum to one: $\sum_{j=1}^{K} p_{ij} = 1$ for all $i$.
+The last column ($j = K$) represents default, which is an absorbing state.
+\end{definition}
+
+\begin{example}[One-year transition matrix (stylized)]\label{ex:transition}
+A simplified 4-state matrix (A, BBB, BB, Default):
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+& \textbf{A} & \textbf{BBB} & \textbf{BB} & \textbf{Default} \\
+\midrule
+\textbf{A}   & 91.5\% & 7.0\% & 1.2\% & 0.3\% \\
+\textbf{BBB} & 4.0\%  & 88.0\% & 6.5\% & 1.5\% \\
+\textbf{BB}  & 0.5\%  & 6.0\%  & 85.0\% & 8.5\% \\
+\textbf{Default} & 0\% & 0\% & 0\% & 100\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Under normal conditions, an A-rated borrower has a 91.5\% chance of remaining A,
+a 7.0\% chance of being downgraded to BBB, and only a 0.3\% chance of defaulting.
+\end{example}
+
+\subsection{Stressing the Transition Matrix}
+
+Under economic stress, two things happen simultaneously:
+\begin{enumerate}
+    \item \textbf{Downgrades accelerate}: the probability of moving to a lower rating increases.
+    \item \textbf{Upgrades slow}: the probability of moving to a higher rating decreases.
+\end{enumerate}
+
+Two approaches to stress the matrix.
+
+\subsubsection{Approach 1: Multiplicative Stress Factors}
+
+Multiply the off-diagonal downgrade probabilities by a stress factor $s > 1$
+and the off-diagonal upgrade probabilities by a factor $1/s$,
+then rescale rows to sum to one.
+
+For a stress factor $s = 2.0$ applied to Example~\ref{ex:transition}:
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+& \textbf{A} & \textbf{BBB} & \textbf{BB} & \textbf{Default} \\
+\midrule
+\textbf{A}   & 83.0\% & 14.0\% & 2.4\% & 0.6\% \\
+\textbf{BBB} & 2.0\%  & 82.0\% & 13.0\% & 3.0\% \\
+\textbf{BB}  & 0.25\% & 3.0\%  & 79.75\% & 17.0\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The A-rated default probability doubled from 0.3\% to 0.6\%;
+the BB default probability doubled from 8.5\% to 17.0\%.
+
+\subsubsection{Approach 2: Generator Matrix (Matrix Exponential)}
+
+\begin{keyidea}
+A more rigorous approach uses the \textbf{generator matrix} $\bm{Q}$ such that
+$\bm{P} = \exp(\bm{Q})$ (matrix exponential).
+To stress the matrix, scale the generator:
+\[
+    \bm{P}_{\text{stress}} = \exp(s \cdot \bm{Q}), \quad s > 1
+\]
+This is equivalent to ``speeding up'' the credit deterioration process
+by a factor of $s$.
+The resulting stressed matrix is guaranteed to be a valid transition matrix
+(all entries non-negative, rows sum to one) --- unlike the multiplicative approach,
+which requires ad-hoc rescaling.
+
+\medskip
+
+Formally, $\bm{Q} = \ln(\bm{P})$ is the matrix logarithm (when it exists with non-negative off-diagonal entries).
+The generator has the property that $q_{ij} \geq 0$ for $i \neq j$
+and $q_{ii} = -\sum_{j \neq i} q_{ij}$ (rows sum to zero).
+\end{keyidea}
+
+\subsection{Worked Example: Investment-Grade Portfolio Under Stress}
+
+\begin{example}[Stressed migration losses]\label{ex:stressed-migration}
+Consider a \$10 billion investment-grade bond portfolio:
+60\% rated A, 40\% rated BBB.
+Under the stressed transition matrix ($s = 2.0$):
+
+\textbf{Rating distribution after one year}:
+\begin{itemize}
+    \item Originally A (\$6B):
+    $83.0\%$ stays A, $14.0\%$ becomes BBB, $2.4\%$ becomes BB, $0.6\%$ defaults.
+    \item Originally BBB (\$4B):
+    $2.0\%$ upgrades to A, $82.0\%$ stays BBB, $13.0\%$ becomes BB, $3.0\%$ defaults.
+\end{itemize}
+
+\textbf{Default losses} (assuming LGD = 60\%):
+\[
+    \text{Default loss} = (6 \times 0.006 + 4 \times 0.030) \times 0.60 = (0.036 + 0.120) \times 0.60 = \$93.6\text{M}
+\]
+
+\textbf{Mark-to-market migration losses}:
+when a bond is downgraded, its spread widens and its market value falls.
+Assume the following spread impacts:
+\begin{itemize}
+    \item A $\to$ BBB: spread widens by 50bps $\Rightarrow$ price drop $\approx$ 2.5\% (at 5Y duration).
+    \item A $\to$ BB: spread widens by 200bps $\Rightarrow$ price drop $\approx$ 10\%.
+    \item BBB $\to$ BB: spread widens by 150bps $\Rightarrow$ price drop $\approx$ 7.5\%.
+\end{itemize}
+
+Migration losses:
+\begin{align*}
+    \text{A} \to \text{BBB}: &\quad 6 \times 0.14 \times 0.025 = \$21.0\text{M} \\
+    \text{A} \to \text{BB}: &\quad 6 \times 0.024 \times 0.10 = \$14.4\text{M} \\
+    \text{BBB} \to \text{BB}: &\quad 4 \times 0.13 \times 0.075 = \$39.0\text{M}
+\end{align*}
+
+\textbf{Total stressed loss}: $\$93.6\text{M} + \$21.0\text{M} + \$14.4\text{M} + \$39.0\text{M} = \$168.0\text{M}$
+(1.68\% of portfolio value).
+
+Under the unstressed matrix, the total loss would be approximately \$60M.
+Stress nearly triples the loss.
+\end{example}
+
+\begin{interpbox}
+The majority of the stressed loss comes not from defaults but from \textbf{downgrades}.
+This is typical of investment-grade portfolios: defaults are rare even under stress,
+but the probability mass shifts downward through the rating spectrum,
+causing widespread spread widening and mark-to-market losses.
+For high-yield portfolios, the balance shifts toward default losses.
+\end{interpbox}
+
+%% ============================================================================
+\section{Reverse Stress Testing}
+\label{sec:reverse}
+%% ============================================================================
+
+Reverse stress testing inverts the standard question.
+Instead of ``given a scenario, what is the loss?''
+it asks ``given a loss threshold, what is the scenario?''
+
+\subsection{The Optimization Formulation}
+
+\begin{definition}[Reverse stress test]
+Let $\bm{\Delta X} = (\Delta X_1, \ldots, \Delta X_k)^\top$ be a vector of macro factor changes
+and $L(\bm{\Delta X})$ be the portfolio loss as a function of those changes.
+Let $L^*$ be the loss threshold (e.g., the loss that would breach the minimum capital ratio).
+
+The reverse stress test solves:
+\[
+    \min_{\bm{\Delta X}} \; \|\bm{\Delta X}\|_{\bm{\Sigma}^{-1}}
+    \quad \text{subject to} \quad L(\bm{\Delta X}) \geq L^*
+\]
+where $\|\bm{\Delta X}\|_{\bm{\Sigma}^{-1}} = \sqrt{\bm{\Delta X}^\top \bm{\Sigma}^{-1} \bm{\Delta X}}$
+is the Mahalanobis norm using the historical covariance matrix $\bm{\Sigma}$ of macro factor changes.
+\end{definition}
+
+\begin{keyidea}
+The Mahalanobis norm measures the ``plausibility'' of the scenario.
+A scenario where GDP falls by 10\% \emph{and} unemployment falls by 5\%
+(contradictory) has a large Mahalanobis distance because such a combination
+has never been observed.
+A scenario where GDP falls by 6\% and unemployment rises to 10\%
+(consistent with historical recessions) has a smaller Mahalanobis distance.
+
+\medskip
+
+Minimizing $\|\bm{\Delta X}\|_{\bm{\Sigma}^{-1}}$ subject to $L \geq L^*$
+finds the \textbf{most plausible scenario} (closest to the mean, in a covariance-adjusted sense)
+that produces the target loss.
+This is the ``least surprising'' way to reach the break point.
+\end{keyidea}
+
+\subsection{Solution Approaches}
+
+\subsubsection{Gradient-Based Optimization}
+
+If $L(\bm{\Delta X})$ is differentiable (e.g., when using the linear regression model from Section~\ref{sec:transmission}),
+the problem becomes:
+\[
+    \min_{\bm{\Delta X}} \; \bm{\Delta X}^\top \bm{\Sigma}^{-1} \bm{\Delta X}
+    \quad \text{s.t.} \quad \bm{\beta}^\top \bm{\Delta X} \leq -L^* / V
+\]
+This is a quadratic program with a linear constraint --- solvable in closed form via the KKT conditions:
+\[
+    \bm{\Delta X}^* = -\frac{L^* / V}{\bm{\beta}^\top \bm{\Sigma} \bm{\beta}} \, \bm{\Sigma} \bm{\beta}
+\]
+
+The optimal scenario moves each factor in proportion to its beta times its covariance with other factors.
+Factors with high betas \emph{and} high variance dominate the scenario.
+
+\subsubsection{Grid Search}
+
+When $L(\bm{\Delta X})$ is nonlinear (satellite models, option-like payoffs):
+\begin{enumerate}
+    \item Define a grid of plausible factor changes for each macro variable.
+    \item Evaluate $L(\bm{\Delta X})$ at each grid point.
+    \item Among all grid points where $L \geq L^*$,
+          select the one with the smallest Mahalanobis distance.
+\end{enumerate}
+
+For $k = 5$ factors with 10 grid points each, this requires $10^5 = 100{,}000$ evaluations ---
+feasible for fast loss functions, prohibitive for slow simulation-based models.
+Latin hypercube sampling or importance sampling can reduce the computational cost.
+
+\subsection{Worked Example: Finding the Break Point}
+
+\begin{example}[Reverse stress test]\label{ex:reverse}
+A bank has CET1 capital of \$5.0B, risk-weighted assets of \$55B,
+and a minimum CET1 ratio requirement of 4.5\% (i.e., minimum capital of \$2.475B).
+Projected PPNR over the stress horizon: \$1.5B.
+
+The loss threshold that would breach the minimum:
+\[
+    L^* = \text{Capital} + \text{PPNR} - \text{Minimum Capital}
+    = 5.0 + 1.5 - 2.475 = \$4.025\text{B}
+\]
+
+Using the linear model with $V = \$60\text{B}$, $\bm{\beta} = (2.8, -3.5, -8.2)^\top$
+(from Example~\ref{ex:regression}), and the historical covariance matrix $\bm{\Sigma}$:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+& $\Delta$GDP & $\Delta$Unemp & $\Delta$Spread \\
+\midrule
+$\Delta$GDP & $4.0$ & $-2.5$ & $-1.2$ \\
+$\Delta$Unemp & $-2.5$ & $3.0$ & $1.8$ \\
+$\Delta$Spread & $-1.2$ & $1.8$ & $2.5$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Solving the KKT conditions yields the critical scenario:
+$\Delta\text{GDP}^* \approx -4.1\%$, $\Delta\text{Unemp}^* \approx +4.2\%$,
+$\Delta\text{Spread}^* \approx +310\text{bps}$.
+
+This is a scenario less severe than the DFAST severely adverse case,
+which means the bank's capital buffer above the minimum is thin ---
+a moderate recession, not a deep one, would be sufficient to breach the floor.
+\end{example}
+
+\begin{warningbox}
+Reverse stress testing often reveals uncomfortable truths.
+If the ``break point'' scenario is a moderate recession rather than an extreme crisis,
+the institution's capital position is weaker than the forward stress tests alone might suggest.
+This is precisely why reverse stress testing is valuable ---
+and why some institutions resist implementing it rigorously.
+\end{warningbox}
+
+%% ============================================================================
+\section{Historical Scenario Replay}
+\label{sec:historical}
+%% ============================================================================
+
+Historical scenario replay is the most intuitive form of stress testing:
+take the factor moves that occurred during a past crisis and apply them to the current portfolio.
+
+\subsection{The Method}
+
+\begin{enumerate}
+    \item \textbf{Select a crisis period} and define the stress window
+          (e.g., September 15, 2008 to March 9, 2009 for the GFC).
+    \item \textbf{Extract factor changes}: compute the cumulative change in each risk factor
+          over the stress window.
+    \item \textbf{Revalue the portfolio}: apply the stressed factor changes
+          to the current portfolio positions using either full revaluation
+          or sensitivity-based (delta-gamma) approximation.
+    \item \textbf{Compute the loss}: the difference between current portfolio value
+          and the stressed portfolio value.
+\end{enumerate}
+
+\subsection{Three Key Historical Scenarios}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lp{2.5cm}p{2.5cm}p{2.5cm}@{}}
+\toprule
+\textbf{Factor} & \textbf{GFC 2008} & \textbf{COVID 2020} & \textbf{SVB 2023} \\
+\midrule
+S\&P~500 & $-57\%$ (peak-to-trough) & $-34\%$ in 23 days & $-5\%$ (broad); bank stocks $-60\%$ \\
+VIX & $14 \to 80$ & $14 \to 82$ & $18 \to 31$ \\
+10Y Treasury & $-300$bps & $-120$bps & $+400$bps (2022--23 hiking cycle) \\
+BBB Spread & $+400$bps & $+350$bps & $+80$bps (banks $+250$bps) \\
+House Prices & $-27\%$ (Case-Shiller, over 2 years) & $+5\%$ (no decline) & flat \\
+Unemployment & $5\% \to 10\%$ & $3.5\% \to 14.7\%$ (April 2020) & $3.4\%$ (stable) \\
+Duration & Sep 2008 -- Mar 2009 (6 months) & Feb 19 -- Mar 23 (23 days) & Mar 8--12 (3 days for SVB) \\
+\bottomrule
+\end{tabular}
+\caption{Key factor moves during three recent crises.
+Each crisis has a distinct ``signature'' --- different factors dominate in each.}
+\end{table}
+
+\subsection{Worked Example: Applying the GFC Scenario}
+
+\begin{example}[GFC replay on a current portfolio]\label{ex:gfc-replay}
+Consider a \$100M portfolio: 60\% equities, 25\% investment-grade bonds (5Y duration),
+15\% high-yield bonds (4Y duration).
+
+Apply the GFC factor moves:
+\begin{itemize}
+    \item \textbf{Equities} ($-57\%$): $\$60\text{M} \times (-0.57) = -\$34.2\text{M}$.
+    \item \textbf{IG bonds}: spread widens by 400bps on a 5Y duration portfolio.
+          Price change $\approx -5 \times 4.0\% = -20\%$.
+          Loss: $\$25\text{M} \times 0.20 = -\$5.0\text{M}$.
+          Partially offset by rates falling 300bps: $+5 \times 3.0\% = +15\%$.
+          Gain: $\$25\text{M} \times 0.15 = +\$3.75\text{M}$.
+          Net IG loss: $-\$1.25\text{M}$.
+    \item \textbf{HY bonds}: spread widens by ~800bps (HY spreads moved more than IG).
+          Price change $\approx -4 \times 8.0\% = -32\%$.
+          Rate offset: $+4 \times 3.0\% = +12\%$.
+          Net: $-20\%$. Loss: $\$15\text{M} \times 0.20 = -\$3.0\text{M}$.
+\end{itemize}
+
+\textbf{Total GFC scenario loss}: $\$34.2\text{M} + \$1.25\text{M} + \$3.0\text{M} = \$38.45\text{M}$
+(38.5\% of portfolio value).
+
+\textbf{Key insight}: the equity allocation dominates the loss.
+The bond portfolio partially benefits from the Treasury rally (flight to quality),
+which offsets some of the spread widening on IG bonds.
+But HY bonds get hit from both sides during a GFC-type event.
+\end{example}
+
+\begin{example}[COVID replay]\label{ex:covid-replay}
+Same portfolio, COVID March 2020 moves:
+\begin{itemize}
+    \item \textbf{Equities} ($-34\%$): $-\$20.4\text{M}$.
+    \item \textbf{IG bonds}: spread $+350$bps, rates $-120$bps.
+          Net spread impact: $-5 \times 3.5\% + 5 \times 1.2\% = -11.5\%$.
+          Loss: $\$25\text{M} \times 0.115 = -\$2.875\text{M}$.
+    \item \textbf{HY bonds}: spread $+700$bps, rates $-120$bps.
+          Net: $-4 \times 7.0\% + 4 \times 1.2\% = -23.2\%$.
+          Loss: $\$15\text{M} \times 0.232 = -\$3.48\text{M}$.
+\end{itemize}
+
+\textbf{Total COVID scenario loss}: $\$20.4 + \$2.875 + \$3.48 = \$26.76\text{M}$ (26.8\%).
+\end{example}
+
+\begin{example}[SVB/rate shock replay]\label{ex:svb-replay}
+The SVB 2023 scenario is fundamentally different: it is a \textbf{rate shock}, not a credit shock.
+Equities fall modestly, but the damage comes from rising rates
+destroying the value of long-duration fixed-income holdings.
+
+Same portfolio, SVB-style moves (rates $+400$bps, equities $-5\%$, bank stocks $-60\%$):
+\begin{itemize}
+    \item \textbf{Equities} ($-5\%$ broad market): $-\$3.0\text{M}$.
+    \item \textbf{IG bonds}: rates $+400$bps, spread $+80$bps.
+          Price change: $-5 \times (4.0\% + 0.8\%) = -24\%$.
+          Loss: $\$25\text{M} \times 0.24 = -\$6.0\text{M}$.
+    \item \textbf{HY bonds}: rates $+400$bps, spread $+80$bps.
+          Price change: $-4 \times 4.8\% = -19.2\%$.
+          Loss: $\$15\text{M} \times 0.192 = -\$2.88\text{M}$.
+\end{itemize}
+
+\textbf{Total SVB scenario loss}: $\$3.0 + \$6.0 + \$2.88 = \$11.88\text{M}$ (11.9\%).
+
+The SVB scenario is less severe in total but exposes a different vulnerability:
+the bond portfolio suffers \emph{without} the offsetting rate decline that cushions
+spread-driven losses in the GFC and COVID scenarios.
+In a rising-rate environment, there is no flight-to-quality offset.
+\end{example}
+
+\begin{keyresult}
+Each historical crisis has a distinct \textbf{risk factor signature}:
+\begin{itemize}
+    \item \textbf{GFC 2008}: massive equity decline + credit spread blowout, partially offset by rate decline.
+    \item \textbf{COVID 2020}: rapid equity decline + credit spread blowout + rate decline, compressed into 23 days.
+    \item \textbf{SVB 2023}: rate shock without credit spread relief, concentrated in bank-exposed sectors.
+\end{itemize}
+Running all three reveals different portfolio vulnerabilities.
+A portfolio that survives the GFC replay may fail the SVB replay, and vice versa.
+This is why multiple historical scenarios are essential.
+\end{keyresult}
+
+\begin{interpbox}
+Notice that the GFC scenario produces the largest absolute loss (\$38.5M),
+but the COVID scenario produces the largest loss \textbf{per unit of time}
+(\$26.8M in 23 days vs.\ \$38.5M in 6 months).
+The speed of the COVID drawdown meant that portfolios had virtually no time to rebalance.
+The SVB scenario, while producing the smallest loss overall,
+is the most dangerous for portfolios with significant duration exposure and no hedges ---
+exactly the position that caused Silicon Valley Bank to fail.
+\end{interpbox}
+
+%% ============================================================================
+\section{References}
+\label{sec:references}
+%% ============================================================================
+
+The following texts provide the regulatory, theoretical, and practical foundations
+for stress testing in financial risk management.
+
+\begin{enumerate}[label={[\arabic*]}, leftmargin=2cm]
+    \item \textbf{Basel Committee on Banking Supervision}\ (2018).
+          \emph{Stress testing principles}.
+          Bank for International Settlements.
+          The definitive regulatory reference for stress testing frameworks.
+          Establishes principles for governance, methodology, and use of results.
+
+    \item \textbf{Board of Governors of the Federal Reserve System}\ (2024).
+          \emph{2024 Stress Test Methodology and Results}.
+          Federal Reserve.
+          Annual DFAST documentation including scenario specifications,
+          modeling approaches, and aggregate results for covered institutions.
+
+    \item \textbf{Breuer, T.\ \& Csisz\'ar, I.}\ (2013).
+          ``Systematic stress tests with entropic plausibility constraints.''
+          \emph{Journal of Banking \& Finance}, 37(5), 1552--1559.
+          Rigorous formulation of reverse stress testing using information-theoretic plausibility measures.
+
+    \item \textbf{Kupiec, P.H.}\ (2000).
+          ``Stress tests and risk capital.''
+          \emph{Journal of Risk}, 2(4), 27--39.
+          Early framework for integrating stress test results with capital adequacy assessment.
+
+    \item \textbf{Hull, J.C.}\ (2018).
+          \emph{Risk Management and Financial Institutions}. 5th ed.
+          Wiley. Chapter~27.
+          Accessible treatment of stress testing and scenario analysis
+          in the context of bank risk management.
+
+    \item \textbf{McNeil, A.J., Frey, R.\ \& Embrechts, P.}\ (2015).
+          \emph{Quantitative Risk Management: Concepts, Techniques and Tools}. 2nd ed.
+          Princeton University Press.
+          Chapters 9 and 14 cover credit risk modeling and stress testing integration.
+
+    \item \textbf{Rebonato, R.}\ (2010).
+          \emph{Coherent Stress Testing: A Bayesian Approach to the Analysis of Financial Stress}.
+          Wiley.
+          Bayesian framework for constructing internally consistent stress scenarios.
+
+    \item \textbf{Glasserman, P., Kang, C.\ \& Kang, W.}\ (2015).
+          ``Stress scenario selection by empirical likelihood.''
+          \emph{Quantitative Finance}, 15(1), 25--41.
+          Systematic approach to selecting worst-case scenarios from historical data.
+\end{enumerate}
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Andr\'es Gonz\'alez Ortega --- Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}

@@ -1,0 +1,22 @@
+data:
+  n_quarters: 40  # 10 years of quarterly data for training
+  n_factors: 6
+  seed: 42
+
+transmission:
+  factors: ["gdp_growth", "unemployment", "equity_index", "interest_rate_10y", "credit_spread", "house_price_index"]
+
+credit:
+  n_ratings: 5  # AAA, AA, A, BBB, default
+  base_default_rate: 0.02
+  lgd: 0.45
+  stress_factor: 2.0  # doubles downgrade probabilities under stress
+
+reverse_stress:
+  loss_threshold: 0.15  # 15% portfolio loss
+  max_iterations: 1000
+
+capital:
+  initial_ratio: 0.12  # 12% CET1 ratio
+
+random_seed: 42
