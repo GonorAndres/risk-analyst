@@ -26,4 +26,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e ".[dev]"
-      - run: pytest --tb=short -q
+      - name: Run tests
+        run: |
+          # Exit code 5 = no tests collected (expected until code is added)
+          pytest --tb=short -q || test $? -eq 5
