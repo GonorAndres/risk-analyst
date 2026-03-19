@@ -1,0 +1,23 @@
+data:
+  n_samples: 3000
+  n_features: 5
+  seed: 42
+
+conformal:
+  alpha: 0.1  # 90% coverage
+  cal_fraction: 0.3
+
+cqr:
+  n_estimators: 100
+  max_depth: 4
+
+adaptive:
+  gamma: 0.01
+  n_calm: 500
+  n_crisis: 300
+
+credit:
+  n_samples: 5000
+  default_rate: 0.10
+
+random_seed: 42

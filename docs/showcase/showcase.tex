@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 10 Projects $\cdot$ 150 Tests $\cdot$ 18{,}000+ Lines of Production Code}
+    {\normalsize\sffamily 11 Projects $\cdot$ 164 Tests $\cdot$ 20{,}000+ Lines of Production Code}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -568,6 +568,66 @@ The GCN captures both dimensions simultaneously: unlike simple centrality measur
 \newpage
 
 %% ============================================================================
+\section*{Project 11 --- Conformal Risk Prediction}
+%% ============================================================================
+
+\begin{problembox}
+A VaR model says ``\$2{,}000'' but how confident are we in that number?
+An ML credit model outputs PD = 0.12 but what's the uncertainty band?
+Traditional approaches (delta method, bootstrap) require distributional assumptions that fail on heavy-tailed financial data.
+We need \emph{distribution-free} uncertainty quantification with finite-sample guarantees.
+\end{problembox}
+
+\begin{answerbox}
+We apply conformal prediction --- a framework that produces prediction intervals with guaranteed coverage regardless of the underlying distribution.
+We wrap VaR models and ML credit scorers with conformal calibration to output coverage-guaranteed intervals.
+For non-stationary markets, we implement Adaptive Conformal Inference (ACI) that maintains coverage even through regime changes.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p11_coverage_guarantee.png}
+    \caption{Rolling coverage on heavy-tailed data (Student-$t$, $\nu = 3$). Conformal prediction (red) maintains coverage near the 90\% target, while parametric intervals (blue) may under-cover during tail events.}
+\end{figure}
+
+\begin{interpbox}
+The key promise of conformal prediction: \textbf{coverage is guaranteed in finite samples} under exchangeability.
+No distributional assumptions needed --- it works whether returns are normal, $t$-distributed, or follow any other distribution.
+
+On heavy-tailed data (like equity returns), parametric methods that assume normality systematically produce intervals that are too narrow, leading to under-coverage.
+Conformal prediction adapts its interval width to the empirical tail behavior, achieving the target coverage.
+
+\textbf{For ML model uncertainty}: instead of just PD = 0.12, the conformal wrapper outputs PD $\in$ [0.08, 0.18] with a 90\% guarantee --- satisfying SR~11-7 model uncertainty requirements.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p11_interval_width.png}
+    \caption{Left: Average interval width by method. Conformal intervals are slightly wider but guarantee coverage. Right: Empirical coverage --- only conformal reliably hits the 90\% target.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p11_adaptive_coverage.png}
+    \caption{Adaptive Conformal Inference under a volatility regime change (gray line). Static conformal loses coverage after the shift; ACI (red) adapts its threshold and recovers within $\sim$40 observations.}
+\end{figure}
+
+\begin{interpbox}
+Financial markets are non-stationary: volatility regimes shift, crises arrive.
+Standard conformal prediction assumes exchangeability, which breaks during regime changes.
+
+\textbf{Adaptive Conformal Inference} (ACI) solves this by updating the coverage threshold online:
+$\alpha_{t+1} = \alpha_t + \gamma \cdot (\alpha - \text{err}_t)$.
+When coverage drops (too many violations), the threshold widens; when coverage is too high, it tightens.
+
+The plot shows the dramatic difference: after the regime change (gray line), static conformal's coverage drops sharply.
+ACI detects the increased volatility and widens its intervals, recovering target coverage within $\sim$40 time steps.
+This makes conformal prediction practical for \emph{real-time risk monitoring} in non-stationary markets.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -586,8 +646,9 @@ The GCN captures both dimensions simultaneously: unlike simple centrality measur
 08 & Deep Hedging                 & 13 & Neural network hedging, CVaR optimization \\
 09 & CVA Counterparty Risk        & 14 & Exposure profiles, netting, wrong-way risk \\
 10 & GNN Credit Contagion         & 18 & Eisenberg-Noe, DebtRank, graph convolutional network \\
+11 & Conformal Risk Prediction    & 14 & Coverage-guaranteed VaR/PD intervals, ACI \\
 \addlinespace
-   & \textbf{Total}               & \textbf{150} & \textbf{18{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{164} & \textbf{20{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

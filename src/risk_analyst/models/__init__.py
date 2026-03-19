@@ -1,5 +1,13 @@
-"""Reusable model implementations: volatility, credit, copula, EVT, and ML models."""
+"""Reusable model implementations: volatility, credit, copula, EVT, conformal, and ML models."""
 
+from risk_analyst.models.conformal import (
+    adaptive_conformal_update,
+    conformal_prediction_interval,
+    conformal_risk_control,
+    cqr_interval,
+    cqr_threshold,
+    split_conformal_threshold,
+)
 from risk_analyst.models.copula import (
     clayton_copula_fit,
     copula_sample,
@@ -54,4 +62,10 @@ __all__ = [
     "copula_sample",
     "tail_dependence",
     "pit_transform",
+    "split_conformal_threshold",
+    "conformal_prediction_interval",
+    "cqr_threshold",
+    "cqr_interval",
+    "conformal_risk_control",
+    "adaptive_conformal_update",
 ]
