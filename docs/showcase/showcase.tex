@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 11 Projects $\cdot$ 164 Tests $\cdot$ 20{,}000+ Lines of Production Code}
+    {\normalsize\sffamily 12 Projects $\cdot$ 180 Tests $\cdot$ 22{,}000+ Lines of Production Code}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -628,6 +628,64 @@ This makes conformal prediction practical for \emph{real-time risk monitoring} i
 \newpage
 
 %% ============================================================================
+\section*{Project 12 --- Climate Risk Scenario Analysis}
+%% ============================================================================
+
+\begin{problembox}
+Climate change poses two distinct financial risks: \emph{transition risk} (policy changes, carbon pricing, stranded assets) and \emph{physical risk} (extreme weather, sea-level rise, agricultural disruption).
+Regulators (ECB, ISSB) now mandate that financial institutions quantify and disclose both.
+The challenge: translating climate scenarios spanning decades into concrete portfolio losses.
+\end{problembox}
+
+\begin{answerbox}
+We implement the full NGFS scenario framework (6 pathways from Net Zero to Current Policies), compute sector-level transition losses (carbon cost repricing, stranded assets), model physical risk via Nordhaus damage functions, and combine both into a Climate VaR metric.
+Sobol sensitivity analysis reveals which climate factor (carbon price, temperature, GDP, sea level) drives the most portfolio risk.
+TCFD-aligned reporting metrics (WACI, financed emissions) are generated automatically.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p12_scenario_heatmap.png}
+    \caption{Total climate risk (transition + physical) by sector and NGFS pathway at 2050. Energy and utilities face the highest losses under orderly transition (high carbon prices), while agriculture and real estate suffer most under disorderly/high-warming scenarios.}
+\end{figure}
+
+\begin{interpbox}
+The heatmap reveals the \textbf{fundamental trade-off} in climate risk: orderly transition (Net Zero, left columns) hits carbon-intensive sectors hard through carbon pricing, but limits physical damage. Disorderly pathways (Current Policies, right columns) avoid transition costs but face severe physical risk.
+
+\textbf{Energy sector}: highest losses across all transition scenarios due to extreme carbon intensity ($\sim$500 tCO2/\$M revenue). Under Net Zero, carbon costs consume a large fraction of EBITDA.
+
+\textbf{No pathway is ``safe''}: every column has red cells. The question is \emph{which sectors} bear the cost --- transition risk falls on fossil fuels, physical risk falls on agriculture and real estate.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/p12_sobol_tornado.png}
+    \caption{Sobol sensitivity analysis: carbon price policy is the dominant driver of portfolio risk (S1 = 0.42), followed by temperature anomaly (S1 = 0.28). Total-order indices (red) capture interaction effects.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p12_waci_evolution.png}
+    \caption{Portfolio Weighted Average Carbon Intensity (WACI) under each NGFS pathway. Under Net Zero, WACI drops 80\% by 2050; under Current Policies, it continues rising.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p12_stranded_assets.png}
+    \caption{Stranded asset exposure by sector at different carbon price levels. At \$300/tCO2, 90\% of energy reserves become uneconomic.}
+\end{figure}
+
+\begin{interpbox}
+\textbf{Sobol tornado}: Carbon price dominates because it directly multiplies emission intensity --- a small change in carbon policy causes a large swing in portfolio value. This tells risk managers: \emph{regulatory policy uncertainty is the biggest climate risk factor}, more than physical temperature itself.
+
+\textbf{WACI evolution}: This is the core TCFD metric. The diverging paths show how portfolio carbon intensity evolves under each scenario. Under Net Zero, the portfolio ``greens'' rapidly as carbon-intensive assets are repriced or divested.
+
+\textbf{Stranded assets}: At \$100/tCO2, 40\% of energy reserves are stranded. At \$300/tCO2 (the NGFS shadow price for orderly net-zero), it rises to 90\%. This chart directly informs divestment and hedging decisions.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -647,8 +705,9 @@ This makes conformal prediction practical for \emph{real-time risk monitoring} i
 09 & CVA Counterparty Risk        & 14 & Exposure profiles, netting, wrong-way risk \\
 10 & GNN Credit Contagion         & 18 & Eisenberg-Noe, DebtRank, graph convolutional network \\
 11 & Conformal Risk Prediction    & 14 & Coverage-guaranteed VaR/PD intervals, ACI \\
+12 & Climate Risk Scenarios       & 16 & NGFS pathways, TCFD metrics, Sobol sensitivity \\
 \addlinespace
-   & \textbf{Total}               & \textbf{164} & \textbf{20{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{180} & \textbf{22{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

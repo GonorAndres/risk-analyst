@@ -1,0 +1,1142 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Algorithm box (no external package needed)
+\newtcolorbox{algorithmbox}[1][]{
+    colback=white,
+    colframe=black!70,
+    fonttitle=\bfseries,
+    #1
+}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{lemma}{Lemma}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+
+\title{%
+    \textbf{Climate Risk Scenario Analysis} \\[0.5em]
+    \large Transition Risk, Physical Risk, and TCFD-Aligned Reporting
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied treatment of climate risk scenario analysis for financial portfolios,
+covering both transition risk and physical risk under the NGFS scenario framework.
+Climate change poses a dual threat to financial stability: transition risk from the
+repricing of carbon-intensive assets during the shift to a low-carbon economy, and
+physical risk from the direct economic damages of rising temperatures, extreme weather
+events, and chronic environmental degradation.
+This document develops both risk channels from first principles.
+We formalize transition risk through carbon cost propagation and stranded asset
+valuation; physical risk through the Nordhaus damage function and extreme value theory
+for acute climate events.
+These are combined into a unified Climate Value-at-Risk metric spanning multiple
+NGFS pathways.
+A Sobol sensitivity analysis identifies the dominant risk drivers, and TCFD-aligned
+reporting metrics --- Weighted Average Carbon Intensity, financed emissions, and
+implied temperature rise --- are derived for portfolio-level disclosure.
+We assume familiarity with basic portfolio theory, Value-at-Risk, and the extreme
+value theory foundations from Project~05.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{Why Climate Risk Matters for Finance}
+\label{sec:why-climate}
+%% ============================================================================
+
+Climate risk is no longer a reputational or ethical concern relegated to ESG
+departments.
+It is a \emph{financial} risk --- one that regulators, central banks, and
+standard-setters now treat as material to portfolio valuation, capital adequacy,
+and systemic stability.
+
+\subsection{The Regulatory Shift: From Voluntary to Mandatory}
+
+The Task Force on Climate-related Financial Disclosures (TCFD), established by the
+Financial Stability Board in 2017, laid the conceptual groundwork: firms should
+disclose how climate change affects their strategy, governance, risk management, and
+financial metrics.
+The TCFD framework was initially voluntary.
+That era is over.
+
+\begin{itemize}
+    \item \textbf{ISSB (2023).} The International Sustainability Standards Board
+          published IFRS~S2 (\emph{Climate-related Disclosures}), making
+          TCFD-aligned reporting a baseline for capital markets globally.
+          Jurisdictions including the UK, EU, Japan, and Australia have moved to
+          adopt or mandate ISSB standards.
+    \item \textbf{ECB (2025).} The European Central Bank's 2025 macroprudential
+          stress test required Eurozone banks to model portfolio losses under
+          NGFS climate scenarios, integrating transition and physical risk channels
+          into supervisory capital assessments for the first time at scale.
+    \item \textbf{EU CSRD (2024).} The Corporate Sustainability Reporting Directive
+          requires approximately 50{,}000 companies to report under the European
+          Sustainability Reporting Standards, which embed double materiality ---
+          both how climate affects the company and how the company affects climate.
+\end{itemize}
+
+\begin{warningbox}
+The transition from voluntary to mandatory disclosure means that climate risk
+modeling is no longer optional for financial institutions.
+A bank that cannot quantify its portfolio exposure to a \$200/tCO$_2$ carbon price
+or a 3$^\circ$C warming scenario faces both regulatory penalties and market
+repricing once peers begin disclosing.
+\end{warningbox}
+
+\subsection{Double Materiality}
+
+The concept of \textbf{double materiality} is central to the European framework
+and increasingly influential elsewhere:
+
+\begin{definition}[Double materiality]\label{def:double-materiality}
+A risk is \textbf{doubly material} if it operates in both directions:
+\begin{enumerate}
+    \item \textbf{Outside-in (financial materiality):} Climate change affects the
+          value of financial assets --- through carbon pricing, physical damages,
+          stranded assets, or liability risks.
+    \item \textbf{Inside-out (impact materiality):} The portfolio's financed
+          activities contribute to climate change --- through greenhouse gas
+          emissions, deforestation, or resource depletion --- creating systemic
+          risk that feeds back into financial outcomes.
+\end{enumerate}
+\end{definition}
+
+A coal-heavy portfolio is exposed from the outside-in (carbon prices reduce
+earnings) \emph{and} contributes from the inside-out (financed emissions
+accelerate warming, increasing physical risk for all market participants).
+
+\subsection{The Scale of Exposure}
+
+The financial stakes are large:
+\begin{itemize}
+    \item \textbf{Stranded assets.} An estimated \$2.5 trillion in fossil fuel
+          reserves become economically unviable if carbon prices rise to levels
+          consistent with the Paris Agreement.
+          These reserves are currently on corporate balance sheets, underpinning
+          equity valuations and debt covenants.
+    \item \textbf{Physical damages.} Under a 3$^\circ$C+ warming pathway, the
+          Nordhaus damage function implies cumulative GDP losses of 4\% or more ---
+          concentrated in agriculture, insurance, real estate, and infrastructure.
+    \item \textbf{Transition costs.} An orderly transition to net zero by 2050
+          requires annual clean-energy investment of approximately \$4 trillion
+          (IEA, 2023), implying massive capital reallocation away from
+          carbon-intensive sectors.
+\end{itemize}
+
+\begin{keyidea}
+Climate risk is not a single number.
+It is a \emph{scenario-dependent} distribution of losses that varies with the
+speed and ambition of the low-carbon transition.
+An orderly transition imposes moderate, predictable transition costs but limits
+physical damages.
+A delayed or absent transition avoids near-term transition costs but exposes
+portfolios to severe, non-linear physical damages.
+The challenge for risk managers is to evaluate portfolios under \emph{all}
+plausible pathways.
+\end{keyidea}
+
+
+%% ============================================================================
+\section{The NGFS Scenario Framework}
+\label{sec:ngfs}
+%% ============================================================================
+
+The Network for Greening the Financial System (NGFS) provides the reference
+scenario set used by most central banks and supervisory authorities.
+Phase~V (2024) defines six pathways organized along two axes: the speed and
+coordination of transition policy (orderly versus disorderly) and the level of
+physical risk (determined by the resulting warming outcome).
+
+\subsection{The Six Pathways}
+
+\begin{table}[H]
+\centering
+\caption{NGFS Phase~V scenario matrix. Temperature outcomes refer to global
+mean surface temperature increase by 2100 relative to pre-industrial levels.
+Shadow carbon prices are illustrative 2035 values in USD/tCO$_2$.}
+\label{tab:ngfs-scenarios}
+\begin{tabular}{@{}p{3.2cm}p{2.0cm}p{1.8cm}p{1.8cm}p{3.5cm}@{}}
+\toprule
+\textbf{Scenario} & \textbf{Transition Risk} & \textbf{Warming ($^\circ$C)} &
+\textbf{Carbon Price (\$/tCO$_2$)} & \textbf{Character} \\
+\midrule
+Net Zero 2050       & Orderly    & 1.5 & $\sim$300 & Immediate, coordinated \\[4pt]
+Below 2$^\circ$C    & Orderly    & 1.7 & $\sim$200 & Gradual strengthening \\[4pt]
+Low Demand          & Orderly    & 1.6 & $\sim$150 & Demand-side shift \\[4pt]
+Delayed Transition  & Disorderly & 1.8 & $\sim$350$^*$ & Late, abrupt policy \\[4pt]
+NDCs                & Insufficient & 2.6 & $\sim$50 & Current pledges only \\[4pt]
+Current Policies    & Minimal    & 3.0+ & $\sim$10  & No new policy \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\footnotesize{$^*$Delayed Transition carbon price is low until $\sim$2030, then
+spikes sharply --- the disorderly character implies a sudden repricing event.}
+\end{table}
+
+\begin{keyresult}
+The six scenarios span a fundamental trade-off: \textbf{transition risk and
+physical risk are inversely correlated across pathways}.
+Orderly scenarios have high carbon prices (transition risk) but limit warming
+to 1.5--1.7$^\circ$C (low physical risk).
+Current Policies has negligible transition risk but exposes portfolios to
+3$^\circ$C+ warming (high physical risk).
+The Delayed Transition scenario is particularly dangerous: it combines high
+transition risk (sudden policy action) with moderate physical risk (1.8$^\circ$C
+warming already locked in).
+\end{keyresult}
+
+\subsection{Shadow Carbon Price Trajectories}
+
+The \textbf{shadow carbon price} is the implicit cost of carbon emissions required
+to achieve a given temperature target.
+Under the Net Zero 2050 pathway:
+
+\begin{equation}\label{eq:carbon-price-path}
+    p_{\text{CO}_2}(t) \approx
+    \begin{cases}
+        50 + 50 \cdot (t - 2025) & \text{for } 2025 \leq t \leq 2030, \\
+        300 + 20 \cdot (t - 2035) & \text{for } t > 2035,
+    \end{cases}
+\end{equation}
+reaching approximately \$300/tCO$_2$ by 2035 and continuing to rise thereafter.
+Under the Delayed Transition pathway, the carbon price remains below \$30/tCO$_2$
+until approximately 2030, then rises sharply to \$350/tCO$_2$ by 2035 --- a
+price shock that propagates through energy markets, credit spreads, and equity
+valuations simultaneously.
+
+\subsection{Short-Term Scenarios (May 2025)}
+
+NGFS introduced short-term scenarios with a 2025--2030 horizon, reflecting the
+recognition that long-run (2050--2100) pathways, while important for strategic
+planning, do not capture the near-term financial risks that drive supervisory
+stress testing and portfolio risk management.
+These short-term scenarios incorporate:
+\begin{itemize}
+    \item Specific policy commitments (e.g., EU CBAM, US IRA provisions).
+    \item Near-term commodity price dynamics and energy supply constraints.
+    \item Technology readiness levels for key abatement options.
+\end{itemize}
+
+\begin{refbox}
+The NGFS scenario portal (\texttt{https://www.ngfs.net/ngfs-scenarios-portal})
+provides downloadable variable paths for GDP, carbon prices, energy mix,
+temperature, and sectoral output for all six pathways.
+These are the direct inputs to the Climate VaR computation in
+Section~\ref{sec:climate-var}.
+\end{refbox}
+
+
+%% ============================================================================
+\section{Transition Risk Modeling}
+\label{sec:transition-risk}
+%% ============================================================================
+
+Transition risk arises when the shift to a low-carbon economy changes the
+relative costs, revenues, and asset values of firms and sectors.
+The primary channel is carbon pricing --- either explicit (carbon taxes, emissions
+trading systems) or implicit (regulation, shifts in demand).
+
+\subsection{Carbon Cost Propagation}
+
+The annualized carbon cost for a firm is:
+
+\begin{equation}\label{eq:carbon-cost}
+    C_{\text{carbon}} = \underbrace{e_i}_{\text{emission intensity}}
+    \times \underbrace{p_{\text{CO}_2}}_{\text{carbon price}}
+    \times \underbrace{R_i}_{\text{revenue}},
+\end{equation}
+where $e_i$ is the firm's emission intensity measured in tonnes of CO$_2$ per
+million dollars of revenue (tCO$_2$/\$M), $p_{\text{CO}_2}$ is the carbon price
+in dollars per tonne, and $R_i$ is the firm's annual revenue.
+
+\begin{keyidea}
+Carbon cost scales \emph{multiplicatively} in two policy-dependent variables:
+emission intensity (which firms can reduce through abatement) and carbon price
+(which is set by regulation or market forces).
+A firm with high emission intensity but low revenue may face less absolute carbon
+cost than a moderate-intensity firm with large revenue.
+Sector-level analysis must account for both.
+\end{keyidea}
+
+\subsection{Sector Emission Intensities}
+
+Emission intensities vary by orders of magnitude across sectors:
+
+\begin{table}[H]
+\centering
+\caption{Approximate Scope 1+2 emission intensities by sector. Values are
+representative and vary by geography and sub-industry.}
+\label{tab:emission-intensity}
+\begin{tabular}{@{}lrl@{}}
+\toprule
+\textbf{Sector} & \textbf{Intensity (tCO$_2$/\$M revenue)} &
+\textbf{Primary Source} \\
+\midrule
+Energy (Oil \& Gas)   & $\sim$500 & Extraction, refining, combustion \\
+Utilities             & $\sim$300 & Power generation (coal, gas) \\
+Materials (Steel, Cement) & $\sim$200 & Industrial processes \\
+Transportation        & $\sim$150 & Fuel combustion \\
+Agriculture           & $\sim$120 & Livestock, fertilizer, land use \\
+Financials            & $\sim$50  & Financed emissions (Scope 3) \\
+Technology            & $\sim$10  & Data centers, supply chain \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Equity Repricing Under Carbon Costs}
+
+When a carbon cost is imposed, the firm's earnings decline.
+The first-order equity repricing is:
+
+\begin{equation}\label{eq:equity-repricing}
+    \Delta V_i = -\frac{C_{\text{carbon},i}}{\text{EBITDA}_i} \times V_i,
+\end{equation}
+where $V_i$ is the current equity value and $\text{EBITDA}_i$ is earnings
+before interest, taxes, depreciation, and amortization.
+The ratio $C_{\text{carbon}} / \text{EBITDA}$ measures how much of the firm's
+earnings are consumed by carbon costs --- a direct analogue of the interest
+coverage ratio for debt.
+
+\begin{definition}[Carbon earnings-at-risk]\label{def:carbon-ear}
+The \textbf{carbon earnings-at-risk} for firm $i$ under scenario $s$ is:
+\begin{equation}
+    \text{CarbonEaR}_{i,s} = \frac{e_i \cdot p_{\text{CO}_2}^{(s)} \cdot R_i}
+    {\text{EBITDA}_i}.
+\end{equation}
+A CarbonEaR above 1.0 implies that carbon costs exceed the firm's entire
+operating earnings --- the firm becomes unprofitable under that carbon price.
+\end{definition}
+
+\subsection{Stranded Assets}
+
+Fossil fuel reserves are classified as \textbf{stranded} when the cost of
+extraction plus the carbon cost exceeds the market price of the commodity:
+
+\begin{equation}\label{eq:stranded}
+    \text{Reserve is stranded} \iff
+    c_{\text{extract}} + p_{\text{CO}_2} \cdot f_{\text{emission}} > p_{\text{market}},
+\end{equation}
+where $c_{\text{extract}}$ is the per-barrel (or per-tonne) extraction cost,
+$f_{\text{emission}}$ is the emission factor (tCO$_2$ per barrel), and
+$p_{\text{market}}$ is the commodity price.
+
+\begin{example}[Stranded reserves under \$200/tCO$_2$]\label{ex:stranded}
+Consider an oil producer with the following profile:
+\begin{itemize}
+    \item Proven reserves: 2 billion barrels of oil equivalent (boe).
+    \item Extraction cost distribution: 40\% of reserves at \$30/boe,
+          35\% at \$50/boe, 25\% at \$70/boe.
+    \item Emission factor: 0.43 tCO$_2$/boe (industry average).
+    \item Market oil price: \$75/boe.
+\end{itemize}
+
+Under a carbon price of \$200/tCO$_2$, the effective carbon cost per barrel is
+$200 \times 0.43 = \$86$/boe.
+The total cost (extraction + carbon) for each reserve tranche:
+\begin{center}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Tranche} & \textbf{Extraction} & \textbf{Total Cost} &
+\textbf{Status} \\
+\midrule
+40\% at \$30/boe & \$30 & \$30 + \$86 = \$116 & Stranded ($>\$75$) \\
+35\% at \$50/boe & \$50 & \$50 + \$86 = \$136 & Stranded ($>\$75$) \\
+25\% at \$70/boe & \$70 & \$70 + \$86 = \$156 & Stranded ($>\$75$) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At \$200/tCO$_2$, \textbf{100\%} of this producer's reserves are stranded ---
+none can be profitably extracted.
+Even at a more moderate \$100/tCO$_2$ (carbon cost = \$43/boe), the highest-cost
+tranche (\$70 + \$43 = \$113) and mid-cost tranche (\$50 + \$43 = \$93) are
+stranded, leaving only 40\% of reserves viable.
+The equity write-down from stranding 60\% of reserves at \$100/tCO$_2$ is:
+\begin{equation}
+    \Delta V = -0.60 \times \text{NPV}(\text{reserves}) \times
+    \frac{V_{\text{equity}}}{\text{EV}},
+\end{equation}
+where EV is enterprise value.
+For a firm where reserves represent 70\% of enterprise value, this implies a
+$\sim$42\% equity loss.
+\end{example}
+
+\begin{warningbox}
+Stranded asset risk is highly non-linear.
+At low carbon prices, most reserves remain viable.
+Above a critical threshold --- which varies by extraction cost profile --- the
+fraction of stranded reserves jumps sharply.
+This creates \emph{cliff risk}: a small increase in carbon price near the
+threshold can trigger a large write-down.
+\end{warningbox}
+
+
+%% ============================================================================
+\section{Physical Risk Modeling}
+\label{sec:physical-risk}
+%% ============================================================================
+
+Physical risk is the direct economic damage from climate change.
+It operates through two channels: \textbf{acute} risks (discrete extreme events
+whose frequency and severity increase with warming) and \textbf{chronic} risks
+(gradual shifts that erode productivity and asset values over decades).
+
+\subsection{The Nordhaus Damage Function}
+
+The workhorse model for aggregate physical damages is the quadratic damage
+function introduced by Nordhaus (2017) in the DICE model:
+
+\begin{equation}\label{eq:nordhaus-damage}
+    D(T) = \alpha \cdot T^2,
+\end{equation}
+where $D(T)$ is the fraction of GDP lost at a global mean temperature increase
+of $T$ degrees Celsius above pre-industrial levels, and $\alpha$ is a calibration
+parameter.
+Nordhaus calibrates $\alpha \approx 0.00267$, implying:
+
+\begin{table}[H]
+\centering
+\caption{GDP loss under the Nordhaus quadratic damage function
+($\alpha = 0.00267$).}
+\label{tab:damage-function}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+\textbf{Warming ($^\circ$C)} & \textbf{GDP Loss (\%)} & \textbf{NGFS Scenario} \\
+\midrule
+1.5 & 0.6\% & Net Zero 2050 \\
+2.0 & 1.1\% & Below 2$^\circ$C \\
+2.5 & 1.7\% & --- \\
+3.0 & 2.4\% & Current Policies \\
+4.0 & 4.3\% & Current Policies (high sensitivity) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{keyidea}
+The quadratic functional form is crucial: damages are \textbf{convex} in
+temperature.
+The marginal damage of each additional degree of warming is \emph{increasing}.
+Moving from 2$^\circ$C to 3$^\circ$C is more than twice as costly as moving
+from 1$^\circ$C to 2$^\circ$C.
+This convexity is the fundamental reason why aggressive mitigation (avoiding
+high warming) is economically rational even when discounted at market rates.
+\end{keyidea}
+
+\begin{remark}
+The Nordhaus damage function has been criticized as too conservative.
+Howard and Sterner (2017) survey the empirical literature and find that including
+non-market damages (biodiversity loss, health impacts, conflict) and accounting
+for persistent growth effects roughly doubles the damage coefficient to
+$\alpha \approx 0.005$, implying $\sim$8\% GDP loss at 4$^\circ$C.
+Our framework treats $\alpha$ as a parameter to be stress-tested rather than a
+fixed constant.
+\end{remark}
+
+\subsection{Acute Physical Risk: Extreme Weather Events}
+
+Acute physical risk manifests as discrete, high-severity events: floods,
+hurricanes, wildfires, and heat waves.
+Climate change increases both the frequency and the severity of these events,
+shifting the tail of the loss distribution.
+
+\begin{definition}[Climate-adjusted extreme value distribution]\label{def:climate-evt}
+Let $L$ denote the annual maximum loss from a climate-sensitive peril (e.g.,
+flood damage).
+Under the Generalized Pareto Distribution (GPD) framework from extreme value
+theory (see Project~05), exceedances above a threshold $u$ follow:
+\begin{equation}\label{eq:gpd-climate}
+    \PV(L - u > y \mid L > u) = \left(1 + \xi \frac{y}{\sigma}\right)^{-1/\xi},
+    \quad y > 0,
+\end{equation}
+where $\xi > 0$ is the shape parameter (controlling tail heaviness) and $\sigma > 0$
+is the scale parameter.
+Under climate change, both parameters are functions of temperature:
+\begin{equation}\label{eq:climate-gpd-params}
+    \sigma(T) = \sigma_0 \cdot \exp(\beta_\sigma \cdot T), \qquad
+    \xi(T) = \xi_0 + \beta_\xi \cdot T,
+\end{equation}
+reflecting that warming increases both the scale (larger typical extreme losses)
+and the shape (heavier tails --- more ``black swan'' events).
+\end{definition}
+
+\begin{example}[100-year flood loss under warming]\label{ex:flood-gpd}
+Consider flood losses for a coastal property portfolio.
+Under current climate ($T = 1.1^\circ$C above pre-industrial):
+\begin{itemize}
+    \item Threshold: $u = \$50$M (losses exceeding this are ``extreme'').
+    \item GPD parameters: $\sigma_0 = 20$, $\xi_0 = 0.15$.
+    \item 100-year return level (0.01 annual exceedance probability):
+\end{itemize}
+\begin{equation}
+    L_{100} = u + \frac{\sigma_0}{\xi_0}
+    \left[\left(\frac{1}{0.01}\right)^{\xi_0} - 1\right]
+    = 50 + \frac{20}{0.15}\left[100^{0.15} - 1\right]
+    = 50 + 133.3 \times 0.995 = \$183\text{M}.
+\end{equation}
+
+Under 3$^\circ$C warming, with $\beta_\sigma = 0.08$ and $\beta_\xi = 0.01$
+per degree:
+\begin{itemize}
+    \item $\sigma(3.0) = 20 \cdot \exp(0.08 \times 3.0) = 20 \times 1.271 = 25.4$.
+    \item $\xi(3.0) = 0.15 + 0.01 \times 3.0 = 0.18$.
+\end{itemize}
+\begin{equation}
+    L_{100}^{3^\circ\text{C}} = 50 + \frac{25.4}{0.18}
+    \left[100^{0.18} - 1\right]
+    = 50 + 141.1 \times 1.318 = \$236\text{M}.
+\end{equation}
+
+The 100-year flood loss increases from \$183M to \$236M --- a \textbf{29\% increase}
+--- under 3$^\circ$C warming.
+More critically, what was a 100-year event under current climate becomes
+approximately a 50-year event, doubling the expected annual frequency.
+\end{example}
+
+\subsection{Chronic Physical Risk}
+
+Chronic risks accumulate gradually and affect asset productivity and valuations
+over decades:
+
+\begin{itemize}
+    \item \textbf{Sea-level rise.} Coastal real estate and infrastructure face
+          permanent inundation or increased flood insurance costs.
+          Under 3$^\circ$C, global mean sea level rises approximately 0.5--1.0m
+          by 2100.
+    \item \textbf{Heat stress.} Labor productivity declines as the number of
+          days exceeding safe working temperatures increases.
+          Outdoor sectors (agriculture, construction, mining) are most exposed.
+    \item \textbf{Agricultural yield decline.} Crop yields decline non-linearly
+          with temperature beyond optimal growing ranges.
+          Each degree above 2$^\circ$C reduces global yields by approximately
+          5--10\% for staple crops (IPCC AR6).
+    \item \textbf{Water stress.} Changing precipitation patterns affect
+          hydropower, agriculture, and industrial water supply.
+\end{itemize}
+
+\subsection{Sector Exposure to Physical Risk}
+
+\begin{table}[H]
+\centering
+\caption{Sector exposure to physical risk channels.
+H = High, M = Medium, L = Low.}
+\label{tab:physical-exposure}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Sector} & \textbf{Acute (Floods/Storms)} & \textbf{Sea-Level Rise} &
+\textbf{Heat Stress} & \textbf{Yield Decline} \\
+\midrule
+Agriculture       & H & M & H & H \\
+Insurance         & H & H & M & L \\
+Real Estate       & H & H & M & L \\
+Infrastructure    & H & H & M & L \\
+Utilities         & M & M & M & L \\
+Transportation    & M & M & L & L \\
+Technology        & L & L & L & L \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{keyresult}
+Transition risk and physical risk affect \emph{different} sectors.
+Energy, utilities, and materials face the highest transition risk (carbon
+intensity).
+Agriculture, insurance, and real estate face the highest physical risk
+(exposure to weather and temperature).
+A well-diversified portfolio is exposed to \emph{both} channels simultaneously,
+and the correlation between them depends on the scenario pathway.
+\end{keyresult}
+
+
+%% ============================================================================
+\section{Climate Value-at-Risk}
+\label{sec:climate-var}
+%% ============================================================================
+
+Climate VaR aggregates transition and physical losses into a single portfolio-level
+risk metric, evaluated under each NGFS scenario.
+
+\subsection{Definition}
+
+\begin{definition}[Climate Value-at-Risk]\label{def:climate-var}
+For a portfolio with $N$ holdings, under NGFS scenario $s$ with time horizon $H$
+(typically 10--30 years), the \textbf{Climate VaR} at confidence level $1 - \alpha$
+is:
+\begin{equation}\label{eq:climate-var}
+    \text{ClimateVaR}_\alpha^{(s)} = \inf\left\{l \geq 0 :
+    \PV\!\left(\sum_{i=1}^{N} w_i \cdot
+    \bigl(L_i^{\text{trans}}(s) + L_i^{\text{phys}}(s)\bigr) \leq l\right)
+    \geq 1 - \alpha\right\},
+\end{equation}
+where $w_i$ is the portfolio weight, $L_i^{\text{trans}}(s)$ is the transition
+loss for holding $i$ under scenario $s$, and $L_i^{\text{phys}}(s)$ is the
+physical loss.
+\end{definition}
+
+\subsection{Loss Components}
+
+The total loss for holding $i$ under scenario $s$ is:
+\begin{equation}\label{eq:total-loss}
+    L_i^{(s)} = L_i^{\text{trans}}(s) + L_i^{\text{phys}}(s),
+\end{equation}
+where:
+
+\paragraph{Transition loss.}
+\begin{equation}\label{eq:trans-loss}
+    L_i^{\text{trans}}(s) = \frac{e_i \cdot p_{\text{CO}_2}^{(s)}(H)
+    \cdot R_i}{\text{EBITDA}_i},
+\end{equation}
+expressed as a fraction of current equity value (i.e., the carbon
+earnings-at-risk from Definition~\ref{def:carbon-ear}).
+
+\paragraph{Physical loss.}
+\begin{equation}\label{eq:phys-loss}
+    L_i^{\text{phys}}(s) = \phi_i \cdot D\!\left(T^{(s)}(H)\right)
+    = \phi_i \cdot \alpha \cdot \bigl(T^{(s)}(H)\bigr)^2,
+\end{equation}
+where $\phi_i \in [0, 1]$ is the physical risk exposure factor for holding $i$
+(from Table~\ref{tab:physical-exposure}), $T^{(s)}(H)$ is the cumulative warming
+by horizon $H$ under scenario $s$, and $D(\cdot)$ is the Nordhaus damage function.
+
+\subsection{Computation}
+
+For deterministic scenarios (a single pathway per NGFS scenario), the Climate VaR
+reduces to a point estimate:
+\begin{equation}\label{eq:climate-var-deterministic}
+    \text{ClimateVaR}^{(s)} = \sum_{i=1}^{N} w_i \cdot L_i^{(s)}.
+\end{equation}
+
+For stochastic scenarios (where carbon prices, temperatures, and damages are
+random variables within each pathway), we simulate:
+
+\begin{algorithmbox}[title={Algorithm 1: Stochastic Climate VaR}]
+\label{alg:climate-var}
+\textbf{Input:} Portfolio weights $\{w_i\}$, firm data $\{e_i, R_i,
+\text{EBITDA}_i, \phi_i\}$, NGFS scenario $s$, number of simulations $M$,
+confidence level $1 - \alpha$.
+\begin{enumerate}
+    \item For $m = 1, \ldots, M$:
+    \begin{enumerate}[label=(\alph*)]
+        \item Draw carbon price: $p_{\text{CO}_2}^{(m)} \sim
+              F_{\text{CO}_2}^{(s)}$.
+        \item Draw temperature: $T^{(m)} \sim F_T^{(s)}$.
+        \item Draw GDP growth path: $g^{(m)} \sim F_g^{(s)}$.
+        \item Compute transition loss for each holding:
+              $L_i^{\text{trans},(m)} = e_i \cdot p_{\text{CO}_2}^{(m)} \cdot R_i
+              / \text{EBITDA}_i$.
+        \item Compute physical loss for each holding:
+              $L_i^{\text{phys},(m)} = \phi_i \cdot \alpha \cdot (T^{(m)})^2$.
+        \item Compute portfolio loss:
+              $L^{(m)} = \sum_{i=1}^{N} w_i \cdot (L_i^{\text{trans},(m)} +
+              L_i^{\text{phys},(m)})$.
+    \end{enumerate}
+    \item Sort $\{L^{(1)}, \ldots, L^{(M)}\}$.
+    \item Return $\text{ClimateVaR}_\alpha^{(s)} = L^{(\lceil M(1-\alpha) \rceil)}$.
+\end{enumerate}
+\end{algorithmbox}
+
+\subsection{Comparison with Traditional VaR}
+
+\begin{table}[H]
+\centering
+\caption{Traditional VaR vs.\ Climate VaR.}
+\label{tab:var-comparison}
+\begin{tabular}{@{}p{3.5cm}p{5cm}p{5cm}@{}}
+\toprule
+\textbf{Dimension} & \textbf{Traditional VaR} & \textbf{Climate VaR} \\
+\midrule
+Time horizon & 1 day -- 10 days & 5 -- 30 years \\
+Risk drivers & Market prices, volatility & Carbon price, temperature, policy \\
+Data source & Historical returns & NGFS scenario projections \\
+Distribution & Estimated from data & Scenario-conditioned simulation \\
+Stationarity & Assumed (or windowed) & Explicitly non-stationary \\
+Interpretation & ``Loss in normal conditions'' & ``Loss under pathway $s$'' \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{example}[Portfolio Climate VaR across pathways]\label{ex:climate-var}
+Consider a portfolio with three sector exposures:
+\begin{itemize}
+    \item 30\% Energy ($e = 500$, EBITDA margin = 15\%, $\phi = 0.3$).
+    \item 40\% Financials ($e = 50$, EBITDA margin = 35\%, $\phi = 0.4$).
+    \item 30\% Technology ($e = 10$, EBITDA margin = 25\%, $\phi = 0.1$).
+\end{itemize}
+
+Under the Delayed Transition pathway ($p_{\text{CO}_2} = \$350$, $T = 1.8^\circ$C
+by 2050):
+\begin{align}
+    L_{\text{Energy}}^{\text{trans}} &= \frac{500 \times 350 \times 10^{-6}}{0.15}
+    = 1.167 \quad (\text{i.e., 116.7\% of equity}), \\
+    L_{\text{Fin}}^{\text{trans}} &= \frac{50 \times 350 \times 10^{-6}}{0.35}
+    = 0.050 \quad (5.0\%), \\
+    L_{\text{Tech}}^{\text{trans}} &= \frac{10 \times 350 \times 10^{-6}}{0.25}
+    = 0.014 \quad (1.4\%).
+\end{align}
+Physical losses (Nordhaus, $\alpha = 0.00267$, $T = 1.8$):
+$D(1.8) = 0.00267 \times 1.8^2 = 0.87\%$.
+\begin{align}
+    L_{\text{Energy}}^{\text{phys}} &= 0.3 \times 0.0087 = 0.26\%, \\
+    L_{\text{Fin}}^{\text{phys}} &= 0.4 \times 0.0087 = 0.35\%, \\
+    L_{\text{Tech}}^{\text{phys}} &= 0.1 \times 0.0087 = 0.09\%.
+\end{align}
+Portfolio Climate VaR:
+\begin{equation}
+    \text{ClimateVaR} = 0.30 \times 1.170 + 0.40 \times 0.054 + 0.30 \times 0.015
+    = 37.7\%.
+\end{equation}
+Under the delayed transition pathway, this portfolio could lose approximately
+38\% of its value over the projection horizon --- driven almost entirely by the
+energy sector's transition risk.
+\end{example}
+
+
+%% ============================================================================
+\section{Sobol Sensitivity Analysis}
+\label{sec:sobol}
+%% ============================================================================
+
+Climate VaR depends on multiple uncertain inputs: carbon price, temperature,
+GDP growth, discount rates, emission intensities, and physical exposure factors.
+\textbf{Sobol sensitivity analysis} provides a rigorous, variance-based
+decomposition of which inputs drive the most uncertainty in the output.
+
+\subsection{Variance Decomposition}
+
+Let $Y = f(X_1, X_2, \ldots, X_k)$ be the Climate VaR as a function of $k$
+uncertain inputs.
+The total variance of $Y$ can be decomposed (under independence of inputs) as:
+
+\begin{equation}\label{eq:anova-decomposition}
+    \operatorname{Var}(Y) = \sum_{i=1}^{k} V_i
+    + \sum_{i < j} V_{ij} + \cdots + V_{1,2,\ldots,k},
+\end{equation}
+where $V_i = \operatorname{Var}\bigl(\EV[Y \mid X_i]\bigr)$ is the variance
+attributable to $X_i$ alone, $V_{ij}$ captures the interaction between $X_i$ and
+$X_j$, and so on.
+
+\subsection{First-Order and Total-Order Indices}
+
+\begin{definition}[Sobol indices]\label{def:sobol}
+The \textbf{first-order Sobol index} for input $X_i$ is:
+\begin{equation}\label{eq:sobol-first}
+    S_i = \frac{V_i}{\operatorname{Var}(Y)}
+    = \frac{\operatorname{Var}\bigl(\EV[Y \mid X_i]\bigr)}{\operatorname{Var}(Y)}.
+\end{equation}
+It measures the fraction of output variance attributable to $X_i$ \emph{alone},
+averaging over all other inputs.
+
+The \textbf{total-order Sobol index} for input $X_i$ is:
+\begin{equation}\label{eq:sobol-total}
+    S_{T_i} = 1 - \frac{\operatorname{Var}\bigl(\EV[Y \mid X_{\sim i}]\bigr)}
+    {\operatorname{Var}(Y)}
+    = \frac{\EV\bigl[\operatorname{Var}(Y \mid X_{\sim i})\bigr]}
+    {\operatorname{Var}(Y)},
+\end{equation}
+where $X_{\sim i}$ denotes all inputs \emph{except} $X_i$.
+The total-order index captures the variance attributable to $X_i$ including all
+interactions with other inputs.
+\end{definition}
+
+\begin{keyidea}
+$S_i$ measures the \emph{main effect} of input $i$: how much output variance
+would be eliminated if $X_i$ were fixed at its true value.
+$S_{T_i}$ measures the main effect \emph{plus all interactions}: fixing $X_i$
+eliminates this fraction of output variance.
+The difference $S_{T_i} - S_i$ quantifies the importance of interactions
+involving $X_i$.
+If all indices are close to their first-order values ($S_{T_i} \approx S_i$
+for all $i$), the model is approximately additive and interactions are negligible.
+\end{keyidea}
+
+\subsection{Saltelli Sampling Design}
+
+Efficient estimation of Sobol indices uses the Saltelli (2002) sampling design.
+For $k$ inputs and $N$ base samples, this requires $N(k + 2)$ model evaluations:
+
+\begin{algorithmbox}[title={Algorithm 2: Saltelli Sampling for Sobol Indices}]
+\label{alg:saltelli}
+\textbf{Input:} Number of base samples $N$, number of inputs $k$, input
+distributions $\{F_1, \ldots, F_k\}$.
+\begin{enumerate}
+    \item Generate two independent $N \times k$ sample matrices $\bm{A}$ and
+          $\bm{B}$, where each column is drawn from the corresponding input
+          distribution.
+    \item For each input $i = 1, \ldots, k$, construct matrix $\bm{A}_B^{(i)}$:
+          take $\bm{A}$ and replace column $i$ with column $i$ from $\bm{B}$.
+    \item Evaluate the model at all $N(k + 2)$ points:
+          $f(\bm{A})$, $f(\bm{B})$, and $f(\bm{A}_B^{(i)})$ for each $i$.
+    \item Estimate first-order indices:
+          \begin{equation}
+              \hat{S}_i = \frac{\frac{1}{N}\sum_{j=1}^{N}
+              f(\bm{B})_j \bigl(f(\bm{A}_B^{(i)})_j - f(\bm{A})_j\bigr)}
+              {\operatorname{Var}(Y)}.
+          \end{equation}
+    \item Estimate total-order indices:
+          \begin{equation}
+              \hat{S}_{T_i} = \frac{\frac{1}{2N}\sum_{j=1}^{N}
+              \bigl(f(\bm{A})_j - f(\bm{A}_B^{(i)})_j\bigr)^2}
+              {\operatorname{Var}(Y)}.
+          \end{equation}
+\end{enumerate}
+\end{algorithmbox}
+
+\subsection{Worked Example: Climate VaR Sensitivity}
+
+\begin{example}[Sobol decomposition of Climate VaR]\label{ex:sobol}
+We apply Sobol analysis to the stochastic Climate VaR model
+(Algorithm~\ref{alg:climate-var}) with five uncertain inputs:
+\begin{center}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Input} & \textbf{Distribution} & $S_i$ & $S_{T_i}$ &
+$S_{T_i} - S_i$ \\
+\midrule
+Carbon price ($p_{\text{CO}_2}$) & LogNormal($\mu$, $\sigma$) & 0.45 & 0.52 & 0.07 \\
+Temperature ($T$)                & Normal($\mu_T$, $\sigma_T$) & 0.25 & 0.30 & 0.05 \\
+GDP growth ($g$)                 & Normal($\mu_g$, $\sigma_g$) & 0.15 & 0.18 & 0.03 \\
+Emission intensity ($e$)         & Uniform(0.8$e_0$, 1.2$e_0$) & 0.08 & 0.10 & 0.02 \\
+Discount rate ($r$)              & Uniform(2\%, 5\%)            & 0.04 & 0.05 & 0.01 \\
+\midrule
+\textbf{Sum} & & 0.97 & 1.15 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Interpretation:}
+\begin{itemize}
+    \item \textbf{Carbon price} is the dominant driver, accounting for 45\% of
+          output variance on its own and 52\% including interactions.
+          Policy uncertainty about the trajectory and level of carbon pricing
+          dominates the Climate VaR uncertainty.
+    \item \textbf{Temperature} is the second-largest driver (25\%), primarily
+          affecting the physical risk channel through the quadratic damage function.
+    \item \textbf{GDP growth} contributes 15\%, affecting both revenue projections
+          and the denominator of the damage function.
+    \item The sum of first-order indices ($\sum S_i = 0.97$) is close to 1,
+          indicating that the model is approximately \emph{additive} ---
+          interactions between inputs are modest.
+    \item The sum of total-order indices exceeds 1 ($\sum S_{T_i} = 1.15$)
+          because total-order indices double-count shared interaction variance.
+\end{itemize}
+\end{example}
+
+\begin{keyresult}
+Sobol analysis reveals that \textbf{carbon pricing policy} is the single most
+important driver of climate portfolio risk --- more important than the physical
+temperature outcome.
+This finding has a direct implication: risk managers should focus scenario
+analysis on the range of plausible carbon price trajectories and treat
+physical risk as a secondary (but still material) driver.
+For portfolios with high physical exposure (real estate, agriculture), the
+ranking may reverse.
+\end{keyresult}
+
+
+%% ============================================================================
+\section{TCFD Reporting Metrics}
+\label{sec:tcfd}
+%% ============================================================================
+
+The TCFD framework (and its successor, ISSB IFRS~S2) defines specific metrics
+for disclosing portfolio-level climate exposure.
+These metrics complement the scenario analysis in Sections~\ref{sec:transition-risk}--\ref{sec:climate-var}
+with standardized, comparable measures.
+
+\subsection{Weighted Average Carbon Intensity (WACI)}
+
+\begin{definition}[WACI]\label{def:waci}
+The \textbf{Weighted Average Carbon Intensity} of a portfolio is:
+\begin{equation}\label{eq:waci}
+    \text{WACI} = \sum_{i=1}^{N} w_i \cdot \text{CI}_i,
+\end{equation}
+where $w_i$ is the portfolio weight of holding $i$ and $\text{CI}_i$ is the
+carbon intensity of the issuer (tCO$_2$/\$M revenue, Scope 1+2).
+\end{definition}
+
+WACI is the TCFD's recommended cross-sector metric because it:
+\begin{itemize}
+    \item Normalizes by revenue, making firms of different sizes comparable.
+    \item Uses portfolio weights, reflecting actual exposure.
+    \item Is readily computable from publicly available emissions data.
+\end{itemize}
+
+\begin{example}[Portfolio WACI computation]\label{ex:waci}
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Holding} & \textbf{Weight ($w_i$)} & \textbf{CI$_i$ (tCO$_2$/\$M)} &
+\textbf{$w_i \times$ CI$_i$} \\
+\midrule
+Oil Major A      & 15\% & 480  & 72.0 \\
+Utility B        & 10\% & 310  & 31.0 \\
+Steel Co C       & 10\% & 220  & 22.0 \\
+Bank D           & 25\% & 45   & 11.3 \\
+Tech E           & 20\% & 8    & 1.6 \\
+Healthcare F     & 20\% & 15   & 3.0 \\
+\midrule
+\textbf{Portfolio WACI} & & & \textbf{140.9} \\
+\bottomrule
+\end{tabular}
+\end{center}
+The portfolio's WACI of 140.9 tCO$_2$/\$M revenue can be benchmarked against the
+MSCI ACWI index ($\sim$130 tCO$_2$/\$M) or a Paris-aligned benchmark
+($\sim$70 tCO$_2$/\$M).
+\end{example}
+
+\subsection{Financed Emissions}
+
+While WACI measures \emph{intensity}, financed emissions measure \emph{absolute}
+contribution to global emissions:
+
+\begin{definition}[Financed emissions]\label{def:financed-emissions}
+The \textbf{financed emissions} attributable to a portfolio are:
+\begin{equation}\label{eq:financed-emissions}
+    E_{\text{financed}} = \sum_{i=1}^{N}
+    \underbrace{\frac{V_i}{\text{EVIC}_i}}_{\text{ownership share}}
+    \times \underbrace{E_i}_{\text{company emissions}},
+\end{equation}
+where $V_i$ is the portfolio's investment in holding $i$, $\text{EVIC}_i$ is the
+enterprise value including cash of the issuer, and $E_i$ is the issuer's total
+Scope 1+2 emissions (tCO$_2$).
+\end{definition}
+
+\subsection{Emission Scopes}
+
+Corporate greenhouse gas emissions are classified into three scopes under the
+GHG Protocol:
+
+\begin{table}[H]
+\centering
+\caption{GHG Protocol emission scopes.}
+\label{tab:emission-scopes}
+\begin{tabular}{@{}lp{7cm}l@{}}
+\toprule
+\textbf{Scope} & \textbf{Description} & \textbf{Data Quality} \\
+\midrule
+Scope 1 & Direct emissions from owned or controlled sources
+          (e.g., combustion in facilities, company vehicles). & High \\[4pt]
+Scope 2 & Indirect emissions from purchased electricity, steam,
+          heating, and cooling. & High \\[4pt]
+Scope 3 & All other indirect emissions in the value chain ---
+          upstream (purchased goods, business travel) and downstream
+          (use of sold products, end-of-life treatment). & Low (estimated) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{warningbox}
+For many sectors, Scope~3 emissions dwarf Scope~1+2.
+An oil company's Scope~1+2 covers extraction and refining; its Scope~3 includes
+the combustion of all sold fuel --- typically 5--10$\times$ larger.
+A bank's Scope~1+2 is negligible (office buildings), but its Scope~3 (financed
+emissions from its loan book) is enormous.
+Reporting only Scope~1+2 can drastically understate a portfolio's true climate
+footprint.
+ISSB IFRS~S2 requires Scope~3 disclosure ``to the extent that it is material''
+--- in practice, this means most large firms must report it.
+\end{warningbox}
+
+\subsection{Portfolio Alignment: Implied Temperature Rise}
+
+The most forward-looking TCFD metric is the portfolio's \textbf{implied
+temperature rise} (ITR):
+
+\begin{definition}[Implied Temperature Rise]\label{def:itr}
+The ITR of a portfolio estimates the global warming that would result if the
+entire economy had the same emission trajectory as the portfolio's holdings.
+It is computed by:
+\begin{enumerate}
+    \item Projecting each holding's emissions through 2050 based on its
+          disclosed targets and historical trajectory.
+    \item Aggregating to a portfolio-level emission pathway.
+    \item Mapping the pathway to a temperature outcome using a carbon budget
+          model.
+\end{enumerate}
+\end{definition}
+
+A portfolio aligned with the Paris Agreement should have an ITR $\leq$ 1.5$^\circ$C.
+Portfolios with high fossil fuel exposure typically have ITR values of
+2.5--3.5$^\circ$C.
+
+\subsection{TCFD Reporting Template}
+
+A complete TCFD-aligned climate risk report includes:
+
+\begin{algorithmbox}[title={TCFD Disclosure Template}]
+\label{alg:tcfd-template}
+\begin{enumerate}
+    \item \textbf{Governance:} Board oversight of climate risk; management's
+          role in assessing and managing climate-related risks.
+    \item \textbf{Strategy:} Climate-related risks and opportunities over
+          short, medium, and long term; impact on business, strategy, and
+          financial planning; resilience under different climate scenarios.
+    \item \textbf{Risk Management:} Processes for identifying, assessing, and
+          managing climate-related risks; integration into overall risk management.
+    \item \textbf{Metrics and Targets:}
+          \begin{itemize}
+              \item WACI (Eq.~\ref{eq:waci}): \underline{\hspace{2cm}}
+                    tCO$_2$/\$M revenue.
+              \item Financed emissions (Eq.~\ref{eq:financed-emissions}):
+                    \underline{\hspace{2cm}} tCO$_2$.
+              \item Scope breakdown: Scope 1 \underline{\hspace{1cm}},
+                    Scope 2 \underline{\hspace{1cm}},
+                    Scope 3 \underline{\hspace{1cm}}.
+              \item Climate VaR by scenario (Eq.~\ref{eq:climate-var}):
+                    \begin{itemize}
+                        \item Net Zero 2050: \underline{\hspace{1.5cm}}\%
+                        \item Below 2$^\circ$C: \underline{\hspace{1.5cm}}\%
+                        \item Delayed Transition: \underline{\hspace{1.5cm}}\%
+                        \item Current Policies: \underline{\hspace{1.5cm}}\%
+                    \end{itemize}
+              \item Implied Temperature Rise: \underline{\hspace{1.5cm}}$^\circ$C.
+              \item Reduction targets: \underline{\hspace{3cm}}.
+          \end{itemize}
+\end{enumerate}
+\end{algorithmbox}
+
+\begin{prereq}
+This section connects directly to the code implementation.
+The pipeline must:
+(1) ingest firm-level emission data and carbon price paths from NGFS;
+(2) compute WACI and financed emissions at the portfolio level;
+(3) run the Climate VaR simulation (Algorithm~\ref{alg:climate-var}) for each
+    scenario;
+(4) perform Sobol sensitivity analysis (Algorithm~\ref{alg:saltelli});
+(5) produce a TCFD-formatted output with all metrics populated.
+\end{prereq}
+
+
+%% ============================================================================
+\section{References}
+\label{sec:references}
+%% ============================================================================
+
+\begin{enumerate}[label={[\arabic*]}]
+    \item \textbf{Task Force on Climate-related Financial Disclosures} (2017).
+          \emph{Recommendations of the Task Force on Climate-related Financial
+          Disclosures}.
+          Financial Stability Board.
+
+    \item \textbf{Network for Greening the Financial System} (2024).
+          \emph{NGFS Climate Scenarios --- Phase~V}.
+          NGFS Secretariat, Banque de France.
+
+    \item \textbf{Nordhaus, W.~D.} (2017).
+          Revisiting the social cost of carbon.
+          \emph{Proceedings of the National Academy of Sciences},
+          114(7):1518--1523.
+
+    \item \textbf{Acharya, V.~V., Berner, R., and Engle, R.~F.} (2023).
+          Climate Stress Testing.
+          \emph{Annual Review of Financial Economics}, 15:291--326.
+
+    \item \textbf{European Central Bank} (2025).
+          Climate risk and financial stability: Insights from the 2025
+          macroprudential stress test.
+          \emph{ECB Macroprudential Bulletin}.
+
+    \item \textbf{IPCC} (2021).
+          \emph{Climate Change 2021: The Physical Science Basis}.
+          Contribution of Working Group~I to the Sixth Assessment Report (AR6).
+          Cambridge University Press.
+
+    \item \textbf{International Sustainability Standards Board} (2023).
+          \emph{IFRS S2: Climate-related Disclosures}.
+          IFRS Foundation.
+
+    \item \textbf{Howard, P.~H. and Sterner, T.} (2017).
+          Few and not so far between: A meta-analysis of climate damage estimates.
+          \emph{Environmental and Resource Economics}, 68(1):197--225.
+
+    \item \textbf{Saltelli, A.} (2002).
+          Making best use of model evaluations to compute sensitivity indices.
+          \emph{Computer Physics Communications}, 145(2):280--297.
+
+    \item \textbf{Sobol', I.~M.} (2001).
+          Global sensitivity indices for nonlinear mathematical models and their
+          Monte Carlo estimates.
+          \emph{Mathematics and Computers in Simulation}, 55(1--3):271--280.
+\end{enumerate}
+
+\end{document}

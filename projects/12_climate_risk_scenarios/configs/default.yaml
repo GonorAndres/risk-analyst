@@ -1,0 +1,29 @@
+scenarios:
+  pathways: ["net_zero_2050", "below_2c", "low_demand", "delayed_transition", "ndcs", "current_policies"]
+  use_api: false
+  horizons: [2030, 2050]
+
+portfolio:
+  sectors: ["energy", "utilities", "materials", "industrials", "financials", "technology", "healthcare", "real_estate"]
+  weights: [0.10, 0.10, 0.10, 0.15, 0.15, 0.20, 0.10, 0.10]
+
+transition:
+  market_price_carbon_equivalent: 80.0
+
+physical:
+  damage_coefficient: 0.00267
+  flood_threshold: 0.5
+
+sobol:
+  n_samples: 512
+  factors: ["carbon_price", "temperature", "gdp_impact", "sea_level_rise"]
+  bounds:
+    carbon_price: [0, 500]
+    temperature: [1.0, 4.0]
+    gdp_impact: [-0.05, 0.02]
+    sea_level_rise: [0.1, 1.5]
+
+risk:
+  alpha: 0.95
+
+random_seed: 42
