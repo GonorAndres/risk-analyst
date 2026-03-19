@@ -1,0 +1,838 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Algorithm box (no external package needed)
+\newtcolorbox{algorithmbox}[1][]{
+    colback=white,
+    colframe=black!70,
+    fonttitle=\bfseries,
+    #1
+}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{lemma}{Lemma}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\CVaR}{\operatorname{CVaR}}
+\newcommand{\ES}{\operatorname{ES}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+
+\title{%
+    \textbf{Reinforcement Learning for Portfolio Risk Management} \\[0.5em]
+    \large CVaR-Constrained Dynamic Allocation
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied treatment of reinforcement learning for dynamic portfolio allocation
+under tail-risk constraints. We formulate the allocation problem as a Constrained
+Markov Decision Process (CMDP) where the agent maximises risk-adjusted returns
+subject to a Conditional Value-at-Risk (CVaR) budget. Two optimisation paradigms
+are developed: policy-gradient (REINFORCE) and derivative-free Natural Evolution
+Strategies (NES). Reward shaping incorporates rolling CVaR penalties and
+transaction costs to produce a realistic trading signal. The RL agent is
+benchmarked against equal-weight, mean-variance, and risk-parity strategies,
+with the goal of achieving competitive returns while maintaining tighter control
+over drawdowns and tail risk. The document provides the mathematical foundations
+required to implement and interpret the code in Project~13.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Portfolio Allocation as a Sequential Decision}
+\label{sec:sequential}
+% ============================================================
+
+\begin{prereq}
+This section assumes familiarity with basic portfolio theory (mean-variance
+optimisation) and Markov Decision Processes. We use CVaR as the central
+risk measure; see Project~05 (EVT \& Tail Risk) for a self-contained treatment.
+\end{prereq}
+
+\subsection{The Static Paradigm and Its Limits}
+
+The classical framework of Markowitz~(1952) solves a \emph{single-period}
+problem:
+\begin{equation}
+    \max_{\bm{w}} \; \bm{w}^\top \bm{\mu}
+    - \frac{\gamma}{2}\,\bm{w}^\top \bm{\Sigma}\,\bm{w},
+    \qquad
+    \text{s.t.}\quad \bm{1}^\top \bm{w} = 1, \quad w_i \geq 0,
+    \label{eq:markowitz}
+\end{equation}
+where $\bm{w} \in \RV^N$ are portfolio weights, $\bm{\mu}$ is the vector of
+expected returns, $\bm{\Sigma}$ is the covariance matrix, and $\gamma > 0$ is a
+risk-aversion parameter. The solution is computed once and held until the next
+rebalancing date.
+
+This approach has two fundamental problems:
+\begin{enumerate}[label=(\roman*)]
+    \item \textbf{Stationarity assumption.} The inputs $(\bm{\mu}, \bm{\Sigma})$
+          are treated as fixed, yet financial markets exhibit regime changes,
+          time-varying volatility, and momentum effects.
+    \item \textbf{No adaptation.} A portfolio optimised for calm markets becomes
+          dangerously concentrated when correlations spike during crises.
+\end{enumerate}
+
+\begin{keyidea}
+The core insight motivating this project: portfolio allocation is not a
+single optimisation problem but a \emph{sequential decision process} where
+the agent must adapt to changing market conditions at every rebalancing step.
+\end{keyidea}
+
+\subsection{MDP Formulation}
+
+We model portfolio rebalancing as a discrete-time Markov Decision Process
+$(\mathcal{S}, \mathcal{A}, P, R, \gamma_d)$:
+
+\begin{definition}[Portfolio MDP]
+\label{def:portfolio_mdp}
+The components are:
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{State} $s_t \in \mathcal{S}$: a feature vector encoding the
+          agent's information at time $t$,
+          \[
+              s_t = \bigl(\bm{r}_{t-L:t},\; \bm{w}_{t}^{-},\;
+              \sigma_{t}^{\text{rolling}},\; \text{DD}_t\bigr),
+          \]
+          where $\bm{r}_{t-L:t}$ are the most recent $L$ asset returns,
+          $\bm{w}_t^{-}$ are the current (pre-rebalance) portfolio weights,
+          $\sigma_t^{\text{rolling}}$ is a rolling volatility estimate, and
+          $\text{DD}_t$ is the current drawdown from peak.
+
+    \item \textbf{Action} $a_t \in \mathcal{A}$: the new portfolio weight
+          vector $\bm{w}_t^{+}$ satisfying $\bm{1}^\top \bm{w}_t^{+} = 1$
+          and $w_{t,i}^{+} \geq 0$ (long-only).
+
+    \item \textbf{Transition} $P(s_{t+1} \mid s_t, a_t)$: determined by
+          market dynamics (asset returns), which the agent does not control.
+
+    \item \textbf{Reward} $r_t = R(s_t, a_t, s_{t+1})$: a risk-adjusted
+          portfolio return (detailed in Section~\ref{sec:reward}).
+
+    \item \textbf{Discount factor} $\gamma_d \in (0, 1]$: controls the
+          agent's planning horizon.
+\end{itemize}
+\end{definition}
+
+The agent learns a \emph{policy} $\pi_\theta(a \mid s)$ parameterised by
+$\theta$ that maps observed market conditions to portfolio allocations. The
+objective is:
+\begin{equation}
+    \max_\theta \; J(\theta) = \EV_{\pi_\theta}
+    \biggl[\sum_{t=0}^{T-1} \gamma_d^t\, r_t \biggr].
+    \label{eq:rl_objective}
+\end{equation}
+
+\begin{remark}
+Unlike supervised learning, there is no ``correct'' label for the optimal
+allocation. The agent discovers good strategies through \emph{interaction}
+with the environment (historical or simulated market data), guided only by
+the reward signal.
+\end{remark}
+
+
+% ============================================================
+\section{CVaR-Constrained MDP}
+\label{sec:cvar_cmdp}
+% ============================================================
+
+\subsection{Why Constrain Tail Risk?}
+
+Maximising expected return (even risk-adjusted return) can still produce
+unacceptable tail losses. A portfolio with a high Sharpe ratio may
+simultaneously have catastrophic drawdowns during rare events. We want a
+\emph{hard constraint} on how bad the worst outcomes can be.
+
+\begin{definition}[CVaR at level $\alpha$]
+\label{def:cvar}
+For a loss random variable $L$ and confidence level $\alpha \in (0,1)$,
+\[
+    \VaR_\alpha(L) = \inf\{l : \PV(L \leq l) \geq \alpha\},
+\]
+\[
+    \CVaR_\alpha(L)
+    = \frac{1}{1-\alpha}\int_\alpha^1 \VaR_u(L)\,du
+    = \EV\bigl[L \mid L \geq \VaR_\alpha(L)\bigr].
+\]
+CVaR is the expected loss in the worst $(1-\alpha)$ fraction of scenarios.
+It is a \emph{coherent} risk measure: subadditive, positive homogeneous,
+translation invariant, and monotone.
+\end{definition}
+
+\subsection{The Constrained Optimisation Problem}
+
+We augment the RL objective~\eqref{eq:rl_objective} with a CVaR constraint:
+\begin{equation}
+    \max_\theta \; J(\theta)
+    \qquad \text{subject to} \qquad
+    \CVaR_\alpha\!\bigl(L^{\pi_\theta}\bigr) \leq \bar{c},
+    \label{eq:cmdp}
+\end{equation}
+where $L^{\pi_\theta}$ is the portfolio loss distribution induced by policy
+$\pi_\theta$ and $\bar{c}$ is the CVaR budget (threshold).
+
+\subsection{Lagrangian Relaxation}
+
+Direct enforcement of~\eqref{eq:cmdp} is intractable in the RL loop. We
+relax it via a Lagrangian:
+\begin{equation}
+    \mathcal{L}(\theta, \lambda)
+    = J(\theta) - \lambda\,
+      \max\!\bigl(\CVaR_\alpha(L^{\pi_\theta}) - \bar{c},\; 0\bigr),
+    \label{eq:lagrangian}
+\end{equation}
+where $\lambda \geq 0$ is the Lagrange multiplier.
+
+\begin{keyresult}
+The multiplier $\lambda$ is the \textbf{shadow price of risk}. It encodes
+how aggressively the agent trades return for tail-risk reduction:
+\begin{itemize}[leftmargin=2em]
+    \item When $\CVaR_\alpha < \bar{c}$: the constraint is \emph{inactive},
+          and the agent maximises return freely ($\lambda$ contribution is zero).
+    \item When $\CVaR_\alpha > \bar{c}$: the penalty activates, pushing the
+          agent toward more conservative allocations.
+\end{itemize}
+A higher $\lambda$ produces a more risk-averse agent; a lower $\lambda$
+tolerates larger tail losses in exchange for higher expected returns.
+\end{keyresult}
+
+\subsection{Dual Ascent on $\lambda$}
+
+In practice $\lambda$ can be treated as a fixed hyperparameter or updated
+via dual gradient ascent:
+\begin{equation}
+    \lambda_{k+1}
+    = \max\!\bigl(0,\;
+      \lambda_k + \eta_\lambda\,
+      (\widehat{\CVaR}_\alpha - \bar{c})\bigr),
+    \label{eq:dual_ascent}
+\end{equation}
+where $\widehat{\CVaR}_\alpha$ is the empirical CVaR estimated from
+recent rollouts and $\eta_\lambda$ is the dual learning rate. This drives
+$\lambda$ upward when the constraint is violated and downward when there
+is slack.
+
+\begin{warningbox}
+Dual ascent introduces an \emph{inner--outer} loop: the inner loop updates
+$\theta$ (policy parameters) for a fixed $\lambda$; the outer loop updates
+$\lambda$ based on whether the CVaR constraint is satisfied. Convergence
+requires the inner loop to approximately solve its sub-problem before each
+$\lambda$ update. In practice, updating $\lambda$ every $K$ policy steps
+(with $K$ between 5 and 20) works well.
+\end{warningbox}
+
+
+% ============================================================
+\section{Policy Gradient and Evolutionary Strategies}
+\label{sec:optimisation}
+% ============================================================
+
+We consider two families of algorithms to optimise $\theta$.
+
+\subsection{REINFORCE (Policy Gradient)}
+
+Given a parameterised stochastic policy $\pi_\theta(a \mid s)$, the
+policy gradient theorem (Williams, 1992) gives:
+\begin{equation}
+    \nabla_\theta J(\theta)
+    = \EV_{\pi_\theta}\!\biggl[
+        \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t \mid s_t)\,
+        \hat{A}_t
+      \biggr],
+    \label{eq:reinforce}
+\end{equation}
+where $\hat{A}_t$ is an advantage estimate (e.g.\ return-to-go minus a
+baseline). The gradient is estimated by sampling trajectories and computing
+the log-probability-weighted returns.
+
+\begin{algorithmbox}[title={REINFORCE for Portfolio Allocation}]
+\begin{enumerate}[leftmargin=1.5em]
+    \item Sample $M$ episodes $\{\tau^{(m)}\}_{m=1}^M$ under $\pi_\theta$.
+    \item For each episode, compute returns
+          $G_t^{(m)} = \sum_{k=t}^{T-1}\gamma_d^{k-t} r_k^{(m)}$.
+    \item Estimate gradient:
+          $\hat{g} = \frac{1}{M}\sum_{m=1}^M \sum_t
+          \nabla_\theta \log\pi_\theta(a_t^{(m)} \mid s_t^{(m)})\,
+          (G_t^{(m)} - b)$.
+    \item Update: $\theta \leftarrow \theta + \eta\,\hat{g}$.
+\end{enumerate}
+\end{algorithmbox}
+
+\textbf{Pros:} Principled gradient estimate; works with any differentiable
+policy (neural network with softmax output for weights).
+
+\textbf{Cons:} High variance; requires careful baseline tuning; the CVaR
+penalty involves sorting (non-differentiable), which complicates gradient
+computation.
+
+\subsection{Natural Evolution Strategies (NES)}
+
+NES (Salimans et al., 2017) is a \emph{derivative-free} black-box
+optimiser. Instead of computing gradients through the policy, it
+maintains a search distribution over parameters $\theta \sim
+\mathcal{N}(\bm{\mu}, \sigma^2 I)$ and uses fitness evaluations to
+estimate the natural gradient.
+
+\begin{definition}[NES Update]
+\label{def:nes}
+Given a population of $N_p$ perturbations
+$\{\bm{\epsilon}_i\}_{i=1}^{N_p}$,
+$\bm{\epsilon}_i \sim \mathcal{N}(\bm{0}, I)$, evaluate the fitness
+$F(\bm{\mu} + \sigma\,\bm{\epsilon}_i)$ for each perturbation. The
+parameter update is:
+\begin{equation}
+    \bm{\mu} \leftarrow \bm{\mu}
+    + \frac{\eta}{N_p\,\sigma}
+      \sum_{i=1}^{N_p} F_i\,\bm{\epsilon}_i,
+    \label{eq:nes_update}
+\end{equation}
+where $F_i = F(\bm{\mu} + \sigma\,\bm{\epsilon}_i)$ is the fitness of
+the $i$-th perturbation.
+\end{definition}
+
+\textbf{Mirror sampling.} For each $\bm{\epsilon}_i$, also evaluate
+$-\bm{\epsilon}_i$, producing an antithetic pair. This halves the
+variance of the gradient estimate at the cost of doubling evaluations
+(a worthwhile trade in practice).
+
+\begin{algorithmbox}[title={NES with Mirror Sampling for CVaR-Constrained Allocation}]
+\begin{enumerate}[leftmargin=1.5em]
+    \item Initialise $\bm{\mu}$, perturbation scale $\sigma$,
+          learning rate $\eta$, CVaR multiplier $\lambda$.
+    \item For each generation $k = 1, 2, \ldots$:
+    \begin{enumerate}[label=(\alph*)]
+        \item Sample $N_p/2$ perturbations $\bm{\epsilon}_i \sim
+              \mathcal{N}(\bm{0}, I)$.
+        \item Evaluate fitness for $\bm{\mu} + \sigma\bm{\epsilon}_i$
+              and $\bm{\mu} - \sigma\bm{\epsilon}_i$
+              (mirror sampling).
+        \item Fitness = Lagrangian~\eqref{eq:lagrangian}: episode return
+              minus $\lambda \cdot \max(\widehat{\CVaR} - \bar{c}, 0)$.
+        \item Update $\bm{\mu}$ via~\eqref{eq:nes_update}.
+        \item Optionally update $\lambda$ via~\eqref{eq:dual_ascent}.
+    \end{enumerate}
+\end{enumerate}
+\end{algorithmbox}
+
+\begin{keyidea}
+\textbf{Why NES for risk-constrained allocation?}
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{Non-differentiable objectives.} CVaR computation
+          involves sorting returns and taking the tail mean --- operations
+          that break standard backpropagation. NES treats the objective as
+          a black box.
+    \item \textbf{Robustness to noisy rewards.} Financial returns are
+          inherently noisy. NES aggregates over a population of
+          perturbations, smoothing out noise.
+    \item \textbf{Parallelisable.} Each perturbation can be evaluated
+          independently, making NES well-suited for GPU or multi-core
+          execution.
+\end{enumerate}
+This is the same optimisation strategy used in Project~08 (Deep Hedging)
+for derivative-free policy search.
+\end{keyidea}
+
+
+% ============================================================
+\section{Reward Shaping for Risk}
+\label{sec:reward}
+% ============================================================
+
+The reward signal is the mechanism through which we communicate our
+risk--return preferences to the agent. A poorly designed reward yields
+an agent that maximises the wrong quantity.
+
+\subsection{Composite Reward}
+
+At each rebalancing step $t$, the reward is:
+\begin{equation}
+    r_t = \underbrace{R_t^{\text{port}}}_{\text{portfolio return}}
+    \;-\; \underbrace{\lambda\,
+    \max\!\bigl(\widehat{\CVaR}_{\alpha,t} - \bar{c},\; 0\bigr)
+    }_{\text{CVaR penalty}}
+    \;-\; \underbrace{\kappa\,
+    \sum_{i=1}^{N}\bigl|w_{t,i}^{+} - w_{t,i}^{-}\bigr|
+    \cdot c_{\text{rate}}
+    }_{\text{transaction cost}},
+    \label{eq:reward}
+\end{equation}
+where:
+\begin{itemize}[leftmargin=2em]
+    \item $R_t^{\text{port}} = \bm{w}_t^{+\top}\bm{r}_t$ is the
+          realised one-step portfolio return.
+    \item $\widehat{\CVaR}_{\alpha,t}$ is the empirical CVaR computed
+          from a rolling window of recent portfolio returns (e.g.\ the
+          past 60 trading days).
+    \item $\lambda \geq 0$ is the risk penalty weight (Lagrange multiplier).
+    \item $\kappa \geq 0$ scales the importance of trading costs.
+    \item $c_{\text{rate}}$ is the per-unit proportional transaction cost
+          (e.g.\ 10 basis points).
+\end{itemize}
+
+\subsection{Effect of Hyperparameters}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Low value} & \textbf{High value} \\
+\midrule
+$\lambda$ (risk penalty)       & Aggressive, higher returns,
+                                 larger drawdowns
+                               & Conservative, lower returns,
+                                 tighter tail risk \\
+$\kappa$ (cost penalty)        & Frequent rebalancing,
+                                 responsive
+                               & Infrequent rebalancing,
+                                 stable \\
+$\bar{c}$ (CVaR threshold)    & Tight constraint, limits
+                                 tail risk early
+                               & Loose constraint, allows
+                                 more risk \\
+$\alpha$ (CVaR confidence)     & Shallow tail ($\alpha=0.90$),
+                                 moderate risk
+                               & Deep tail ($\alpha=0.99$),
+                                 extreme risk \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warningbox}
+The CVaR penalty and the portfolio return operate on very different scales.
+If $\lambda$ is too large relative to typical returns, the agent learns to
+hold all-cash or all-bonds. If $\lambda$ is too small, the CVaR constraint
+has no effect. In practice, normalise returns and CVaR to similar
+magnitudes before tuning $\lambda$.
+\end{warningbox}
+
+\subsection{Rolling CVaR Estimation}
+
+Given a window of $W$ recent portfolio returns
+$\{R^{\text{port}}_{t-W+1}, \ldots, R^{\text{port}}_t\}$:
+\begin{enumerate}[leftmargin=2em]
+    \item Convert returns to losses: $l_k = -R^{\text{port}}_k$.
+    \item Sort losses in descending order:
+          $l_{(1)} \geq l_{(2)} \geq \cdots \geq l_{(W)}$.
+    \item The number of tail observations:
+          $n_\alpha = \lceil (1-\alpha)\,W \rceil$.
+    \item Empirical CVaR:
+          $\widehat{\CVaR}_\alpha = \frac{1}{n_\alpha}
+          \sum_{k=1}^{n_\alpha} l_{(k)}$.
+\end{enumerate}
+
+\begin{remark}
+This is a non-parametric estimate. For small windows ($W < 100$) and
+high $\alpha$ ($\geq 0.95$), the estimate is noisy because only a few
+observations fall in the tail. Using $\alpha = 0.95$ with $W = 60$ yields
+approximately $n_\alpha = 3$ tail observations. This noise is part of
+why derivative-free optimisation (NES) is preferred over gradient methods.
+\end{remark}
+
+
+% ============================================================
+\section{Benchmark Strategies}
+\label{sec:benchmarks}
+% ============================================================
+
+To evaluate the RL agent, we compare it against three classical strategies
+that span the spectrum from estimation-free to model-dependent.
+
+\subsection{Equal Weight (1/N)}
+
+The simplest possible allocation:
+\begin{equation}
+    w_i = \frac{1}{N}, \qquad i = 1, \ldots, N.
+    \label{eq:equal_weight}
+\end{equation}
+
+DeMiguel, Garlappi \& Uppal~(2009) showed that $1/N$ outperforms many
+``optimal'' strategies in out-of-sample tests. The reason is instructive:
+optimal strategies introduce \emph{estimation error} through
+$(\hat{\bm{\mu}}, \hat{\bm{\Sigma}})$, and this error often exceeds the
+benefit of optimisation.
+
+\begin{keyresult}
+$1/N$ is the natural baseline: any strategy that cannot beat equal weighting
+is not worth its complexity. Maximum diversification with zero estimation
+error.
+\end{keyresult}
+
+\subsection{Mean-Variance (Markowitz)}
+
+The tangency portfolio weights (assuming a risk-free rate of zero):
+\begin{equation}
+    \bm{w}^{\text{MV}}
+    = \frac{\bm{\Sigma}^{-1}\bm{\mu}}
+           {\bm{1}^\top\bm{\Sigma}^{-1}\bm{\mu}}.
+    \label{eq:mv}
+\end{equation}
+
+This is optimal under the assumption that returns are i.i.d.\ multivariate
+normal and that $(\bm{\mu}, \bm{\Sigma})$ are known exactly. Neither
+assumption holds in practice:
+\begin{itemize}[leftmargin=2em]
+    \item Returns are fat-tailed and exhibit volatility clustering.
+    \item Estimated $\hat{\bm{\mu}}$ is notoriously unreliable;
+          $\hat{\bm{\Sigma}}$ is more stable but still subject to
+          regime changes.
+\end{itemize}
+
+\begin{warningbox}
+Mean-variance portfolios are highly sensitive to the expected return
+vector $\bm{\mu}$. Small perturbations in $\hat{\bm{\mu}}$ can flip
+the optimal weights entirely. This is the \emph{Markowitz curse}: the
+assets with the highest estimated expected returns also tend to have the
+highest estimation error, leading to extreme and unstable allocations.
+\end{warningbox}
+
+\subsection{Risk Parity}
+
+Risk parity sets weights so that each asset contributes equally to
+portfolio \emph{volatility}:
+\begin{equation}
+    w_i \propto \frac{1}{\sigma_i},
+    \qquad \text{normalised so that } \sum_i w_i = 1,
+    \label{eq:risk_parity}
+\end{equation}
+where $\sigma_i = \sqrt{\Sigma_{ii}}$ is the marginal volatility of
+asset $i$. The intuition: low-volatility assets receive higher weight,
+preventing the portfolio from being dominated by a single volatile asset.
+
+\begin{remark}
+Risk parity equalises \emph{volatility} contributions, not
+\emph{tail risk} contributions. During crises, correlations spike and
+even a volatility-balanced portfolio can suffer concentrated tail losses.
+This motivates the tail risk parity approach developed in
+Section~\ref{sec:dynamic_risk}.
+\end{remark}
+
+\subsection{Summary of Benchmark Properties}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Strategy} & \textbf{Estimation needed}
+                   & \textbf{Adapts to regimes}
+                   & \textbf{Controls tail risk} \\
+\midrule
+Equal weight ($1/N$)  & None     & No  & No  \\
+Mean-variance         & $\bm{\mu}, \bm{\Sigma}$ & No & No \\
+Risk parity           & $\bm{\Sigma}$ only & Partially & No \\
+\textbf{RL agent}     & Learned  & \textbf{Yes} & \textbf{Yes} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ============================================================
+\section{Dynamic Risk Budgeting}
+\label{sec:dynamic_risk}
+% ============================================================
+
+\subsection{Marginal CVaR}
+
+The \emph{marginal CVaR} of asset $i$ measures how sensitive the
+portfolio CVaR is to a small change in weight $w_i$:
+\begin{equation}
+    \text{MCVaR}_i
+    = \frac{\partial\,\CVaR_\alpha(\bm{w})}{\partial w_i}
+    = \EV\!\bigl[r_i \mid R^{\text{port}} \leq -\VaR_\alpha\bigr],
+    \label{eq:mcvar}
+\end{equation}
+where $R^{\text{port}} = \bm{w}^\top \bm{r}$ and the expectation is
+taken over the joint return distribution, conditioned on portfolio
+returns being in the worst $(1-\alpha)$ tail.
+
+\begin{definition}[CVaR Contribution]
+\label{def:cvar_contribution}
+The CVaR contribution of asset $i$ is the product of its weight and
+its marginal CVaR:
+\[
+    \text{CCVaR}_i = w_i \cdot \text{MCVaR}_i.
+\]
+By Euler's theorem for homogeneous functions, the total portfolio CVaR
+decomposes as:
+\begin{equation}
+    \CVaR_\alpha(\bm{w})
+    = \sum_{i=1}^{N} \text{CCVaR}_i
+    = \sum_{i=1}^{N} w_i\,\text{MCVaR}_i.
+    \label{eq:euler_decomp}
+\end{equation}
+\end{definition}
+
+\subsection{Tail Risk Parity}
+
+\begin{definition}[Tail Risk Parity]
+\label{def:tail_risk_parity}
+A portfolio satisfies tail risk parity if every asset contributes
+equally to portfolio CVaR:
+\begin{equation}
+    \text{CCVaR}_1 = \text{CCVaR}_2 = \cdots = \text{CCVaR}_N
+    = \frac{\CVaR_\alpha(\bm{w})}{N}.
+    \label{eq:tail_parity}
+\end{equation}
+\end{definition}
+
+While standard risk parity equalises volatility contributions, tail
+risk parity equalises \emph{tail} contributions. This is the risk-aware
+analogue: it prevents any single asset from dominating the portfolio's
+worst-case losses.
+
+\begin{keyidea}
+A well-trained RL agent should \textbf{approximately} converge to a tail
+risk parity allocation --- not because it is told to, but because the CVaR
+penalty in the reward function incentivises equalising tail risk
+contributions. If an asset dominates the tail, the agent learns to
+underweight it. We validate this by comparing the agent's learned
+allocations with the analytical tail risk parity solution.
+\end{keyidea}
+
+\subsection{Empirical Marginal CVaR Estimation}
+
+Given $M$ historical scenarios (or simulated paths) of asset returns
+$\{\bm{r}^{(m)}\}_{m=1}^M$:
+\begin{enumerate}[leftmargin=2em]
+    \item Compute portfolio returns:
+          $R^{(m)} = \bm{w}^\top \bm{r}^{(m)}$ for each scenario.
+    \item Identify the tail set:
+          $\mathcal{T} = \{m : R^{(m)} \leq -\VaR_\alpha\}$,
+          with $|\mathcal{T}| = \lceil(1-\alpha)M\rceil$.
+    \item Estimate marginal CVaR for each asset:
+          \[
+              \widehat{\text{MCVaR}}_i
+              = -\frac{1}{|\mathcal{T}|}
+              \sum_{m \in \mathcal{T}} r_i^{(m)}.
+          \]
+    \item CVaR contribution:
+          $\widehat{\text{CCVaR}}_i = w_i \cdot \widehat{\text{MCVaR}}_i$.
+\end{enumerate}
+
+\begin{remark}
+The RL agent does not compute marginal CVaR explicitly. Instead, it
+learns to avoid allocations that concentrate tail risk through the reward
+signal. The marginal CVaR analysis is a \emph{diagnostic}: it lets us
+check whether the agent's behaviour is consistent with good risk
+budgeting.
+\end{remark}
+
+
+% ============================================================
+\section{Results Interpretation}
+\label{sec:results}
+% ============================================================
+
+Four diagnostic plots form the core of the evaluation framework for
+the RL agent.
+
+\subsection{Cumulative Return Curves}
+
+\textbf{What it shows.} The growth of \$1 invested under each strategy
+over the evaluation period.
+
+\textbf{What to look for.}
+\begin{itemize}[leftmargin=2em]
+    \item Does the RL agent \emph{outperform} or \emph{match} the
+          benchmarks in total return?
+    \item Is the growth path \emph{smoother}? A strategy that earns the
+          same total return with less volatility is superior.
+    \item During \emph{drawdown periods} (market crashes), does the RL
+          agent lose less than the benchmarks?
+\end{itemize}
+
+\begin{keyresult}
+The RL agent may not always have the highest terminal wealth. The
+goal is competitive returns with visibly better drawdown control.
+Look for the RL curve to ``flatten'' during crashes rather than
+plunging with the market.
+\end{keyresult}
+
+\subsection{Allocation Evolution Over Time}
+
+\textbf{What it shows.} Stacked area chart of portfolio weights
+$\bm{w}_t$ over time.
+
+\textbf{What to look for.}
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Regime adaptation}: does the agent shift toward
+          defensive assets (bonds, low-volatility stocks) before or during
+          market stress?
+    \item \textbf{Smoothness}: are the allocation changes gradual
+          (indicating stable learned features) or erratic (indicating
+          overfitting to noise)?
+    \item \textbf{Comparison with benchmarks}: equal weight is flat by
+          construction, risk parity is nearly flat. The RL agent should
+          show meaningful variation correlated with market conditions.
+\end{itemize}
+
+\subsection{Risk--Return Scatter}
+
+\textbf{What it shows.} Each strategy plotted with annualised return on
+the $y$-axis and a risk metric (annualised volatility or CVaR) on the
+$x$-axis.
+
+\textbf{What to look for.}
+\begin{itemize}[leftmargin=2em]
+    \item A strategy in the \emph{upper-left} quadrant (high return, low
+          risk) dominates.
+    \item The RL agent should sit \emph{above} the line connecting
+          equal weight and mean-variance, indicating a better
+          risk--return trade-off.
+    \item If using CVaR as the $x$-axis, the RL point should be near
+          or below the threshold $\bar{c}$, confirming constraint
+          satisfaction.
+\end{itemize}
+
+\subsection{Drawdown Comparison}
+
+\textbf{What it shows.} Time series of drawdown
+$\text{DD}_t = (V_{\max,t} - V_t) / V_{\max,t}$, where $V_t$ is
+portfolio value and $V_{\max,t}$ is the running peak.
+
+\textbf{What to look for.}
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Maximum drawdown}: the deepest trough for each
+          strategy. The RL agent should have a shallower maximum drawdown.
+    \item \textbf{Recovery time}: how long does it take to return to the
+          previous peak? The RL agent should recover faster.
+    \item \textbf{Frequency}: does the RL agent experience fewer
+          significant drawdown events overall?
+\end{itemize}
+
+\begin{refbox}
+For a comprehensive treatment of drawdown-based risk measures, see
+Chekhlov, Uryasev \& Zabarankin~(2005), ``Drawdown Measure in Portfolio
+Optimization.'' The maximum drawdown statistic is closely related to CVaR
+--- both focus on tail events, but drawdown captures the temporal structure
+of losses.
+\end{refbox}
+
+
+% ============================================================
+\section{References}
+\label{sec:references}
+% ============================================================
+
+\begin{enumerate}[leftmargin=2em, label={[\arabic*]}]
+
+    \item \textbf{Markowitz, H.}~(1952).
+          ``Portfolio Selection.''
+          \emph{The Journal of Finance}, 7(1), 77--91.
+          The foundational paper on mean-variance optimisation, establishing
+          that investors should select portfolios based on both expected
+          return and variance.
+
+    \item \textbf{Merton, R.~C.}~(1969).
+          ``Lifetime Portfolio Selection under Uncertainty: The
+          Continuous-Time Case.''
+          \emph{The Review of Economics and Statistics}, 51(3), 247--257.
+          Extended Markowitz to a continuous-time dynamic setting, showing
+          that optimal allocation depends on the state of the economy.
+
+    \item \textbf{DeMiguel, V., Garlappi, L., \& Uppal, R.}~(2009).
+          ``Optimal Versus Naive Diversification: How Inefficient Is the
+          1/N Portfolio Strategy?''
+          \emph{The Review of Financial Studies}, 22(5), 1915--1953.
+          Demonstrated that equal-weight portfolios outperform many
+          ``optimal'' strategies out-of-sample due to estimation error.
+
+    \item \textbf{Tamar, A., Glassner, Y., \& Mannor, S.}~(2015).
+          ``Optimizing the CVaR via Sampling.''
+          \emph{Proceedings of the AAAI Conference on Artificial Intelligence},
+          29(1).
+          Developed algorithms for optimising CVaR-constrained MDPs using
+          sampled trajectories, providing the theoretical basis for
+          CVaR-constrained policy optimisation.
+
+    \item \textbf{Salimans, T., Ho, J., Chen, X., Sidor, S., \&
+          Sutskever, I.}~(2017).
+          ``Evolution Strategies as a Scalable Alternative to Reinforcement
+          Learning.''
+          \emph{arXiv preprint arXiv:1703.03864}.
+          Showed that NES can match or exceed the performance of
+          gradient-based RL methods while being simpler to implement and
+          easier to parallelise.
+
+    \item \textbf{Wang, H., et al.}~(2025).
+          ``ICVaR-DRL: Deep Reinforcement Learning with Iterated CVaR
+          Constraints for Dynamic Portfolio Optimisation.''
+          Extended CVaR-constrained RL with an iterated risk assessment
+          framework, allowing the risk constraint to adapt over time.
+
+\end{enumerate}
+
+\end{document}

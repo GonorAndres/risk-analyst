@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 12 Projects $\cdot$ 180 Tests $\cdot$ 22{,}000+ Lines of Production Code}
+    {\normalsize\sffamily\bfseries 13 Projects $\cdot$ 192 Tests $\cdot$ 25{,}000+ Lines of Production Code --- Curriculum Complete}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -686,6 +686,63 @@ The heatmap reveals the \textbf{fundamental trade-off} in climate risk: orderly 
 \newpage
 
 %% ============================================================================
+\section*{Project 13 --- RL for Portfolio Risk Management}
+%% ============================================================================
+
+\begin{problembox}
+Markowitz portfolio optimization is static: compute weights once, hold forever.
+But markets are non-stationary --- volatility regimes shift, correlations break, crises arrive.
+We need a portfolio allocation strategy that \emph{adapts dynamically} to changing market conditions while controlling tail risk.
+\end{problembox}
+
+\begin{answerbox}
+We train a reinforcement learning agent to dynamically allocate across 5 assets (equities, bonds, gold, real estate, cash), maximizing returns subject to a CVaR constraint.
+The agent uses a pure-numpy neural network with softmax output (valid portfolio weights) optimized via Natural Evolution Strategies.
+We compare against three benchmarks: equal weight (1/N), mean-variance (Markowitz), and risk parity.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p13_cumulative_returns.png}
+    \caption{Cumulative wealth comparison across strategies. The RL agent (red) achieves competitive returns while maintaining stricter tail risk control via its CVaR constraint.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p13_allocation.png}
+    \caption{RL agent's dynamic allocation over time. During the calm regime (days 1--250), the agent holds more equities. After the regime change (dotted line), it shifts to bonds and cash --- \emph{automatically, without being told about the regime change}.}
+\end{figure}
+
+\begin{interpbox}
+The \textbf{allocation shift} at day 250 is the key result: the RL agent detects increased volatility through its state vector (rolling volatility, drawdown) and \emph{learns} to reduce equity exposure in favor of safer assets.
+
+This is \textbf{dynamic risk budgeting} --- the agent implicitly equalizes tail risk contributions across assets by shifting weights when market conditions change.
+No human intervention, no rule-based triggers. The policy network discovers the optimal response from data alone.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/p13_risk_return.png}
+    \caption{Risk-return trade-off: the RL agent (red, large dot) achieves the best CVaR (lowest tail risk) among all strategies, at competitive return levels.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p13_drawdown.png}
+    \caption{Drawdown comparison: the RL agent (red line) experiences shallower drawdowns than equal weight and risk parity, recovering faster from losses.}
+\end{figure}
+
+\begin{interpbox}
+\textbf{Risk-return scatter}: The RL agent sits in the \textbf{upper-left quadrant} --- high return, low CVaR. It achieves better tail risk management than mean-variance (which ignores tails) and risk parity (which doesn't adapt dynamically).
+
+\textbf{Drawdown}: The RL agent's drawdowns are consistently shallower. During the crisis regime, while equal-weight portfolios suffer deep losses, the RL agent has already shifted to defensive assets.
+
+\textbf{The CVaR constraint is the key}: by penalizing tail losses in the reward function, the agent learns to avoid concentrated positions that could cause catastrophic losses --- exactly the behavior a risk manager wants.
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -706,8 +763,9 @@ The heatmap reveals the \textbf{fundamental trade-off} in climate risk: orderly 
 10 & GNN Credit Contagion         & 18 & Eisenberg-Noe, DebtRank, graph convolutional network \\
 11 & Conformal Risk Prediction    & 14 & Coverage-guaranteed VaR/PD intervals, ACI \\
 12 & Climate Risk Scenarios       & 16 & NGFS pathways, TCFD metrics, Sobol sensitivity \\
+13 & RL Portfolio Risk            & 12 & CVaR-constrained MDP, dynamic allocation \\
 \addlinespace
-   & \textbf{Total}               & \textbf{180} & \textbf{22{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{192} & \textbf{25{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

@@ -1,0 +1,29 @@
+portfolio:
+  n_assets: 5
+  asset_names: ["Equities", "Bonds", "Gold", "Real Estate", "Cash"]
+  initial_capital: 1.0
+  cost_rate: 0.001
+
+environment:
+  lookback: 10
+  cvar_alpha: 0.95
+  cvar_threshold: 0.03
+  cvar_lambda: 2.0
+
+agent:
+  hidden_dim: 32
+
+training:
+  n_epochs: 100
+  population_size: 40
+  sigma: 0.02
+  lr: 0.01
+
+simulation:
+  n_steps: 500
+  n_assets: 5
+
+benchmarks:
+  risk_aversion: 1.0
+
+random_seed: 42
