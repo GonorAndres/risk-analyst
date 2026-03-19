@@ -1,0 +1,19 @@
+network:
+  n_nodes: 50
+  n_edges: 150
+  n_features: 5
+
+contagion:
+  shock_fraction: 0.5
+  n_cascade_simulations: 50
+
+gcn:
+  hidden_dim: 16
+  n_classes: 1
+
+training:
+  n_epochs: 80
+  population_size: 40
+  lr: 0.03
+
+random_seed: 42

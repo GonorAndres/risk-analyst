@@ -46,7 +46,7 @@
     \vspace{-1cm}
     {\LARGE\sffamily\bfseries Risk Analyst: Portfolio Showcase} \\[0.4em]
     {\large\sffamily Frontier Quantitative Risk Analysis in Python} \\[0.3em]
-    {\normalsize\sffamily 9 Projects $\cdot$ 132 Tests $\cdot$ 16{,}000+ Lines of Production Code}
+    {\normalsize\sffamily 10 Projects $\cdot$ 150 Tests $\cdot$ 18{,}000+ Lines of Production Code}
 }
 \author{Andr\'es Gonz\'alez Ortega}
 \date{\today}
@@ -519,6 +519,55 @@ Basel III requires banks to identify and separately capitalize wrong-way risk ex
 \newpage
 
 %% ============================================================================
+\section*{Project 10 --- GNN Credit Contagion}
+%% ============================================================================
+
+\begin{problembox}
+Traditional credit models treat defaults as independent events driven by common factors.
+But defaults \emph{cascade}: when one institution fails, its counterparties lose their exposures, some of them fail too, and the shock propagates through the financial network.
+The 2008 crisis proved that interconnectedness is itself a source of systemic risk.
+\end{problembox}
+
+\begin{answerbox}
+We model the financial system as a directed, weighted network (nodes = institutions, edges = exposures).
+We implement the Eisenberg--Noe clearing mechanism for cascade simulation, compute DebtRank (systemic importance) for each node, and train a Graph Convolutional Network (GCN) in pure numpy to predict which institutions are most likely to default based on both their own features and their network position.
+\end{answerbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p10_network_cascade.png}
+    \caption{Left: Financial network colored by DebtRank (red = systemically important). Right: Cascade size when each node is shocked --- a few nodes trigger large cascades while most cause minimal damage.}
+\end{figure}
+
+\begin{interpbox}
+\textbf{Left panel}: Each dot is a financial institution; size and color reflect its DebtRank (systemic importance).
+Red nodes in the center are highly connected ``too-big-to-fail'' institutions --- their failure would cause the largest cascading losses.
+The red-circled node is the most systemically important.
+
+\textbf{Right panel}: When we shock each node individually and run the Eisenberg--Noe clearing algorithm, only a few nodes (red bars) trigger significant cascades.
+This asymmetry is the key insight: \textbf{systemic risk is concentrated in a few critical nodes}, not distributed evenly.
+
+A regulator can use this analysis to identify which institutions need the most scrutiny and highest capital buffers.
+\end{interpbox}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/p10_debtrank_centrality.png}
+    \caption{DebtRank vs degree centrality, colored by capital ratio. Highly connected nodes with low capital (red dots, upper right) are the most dangerous.}
+\end{figure}
+
+\begin{interpbox}
+This scatter plot reveals the two dimensions of systemic risk: \textbf{connectedness} (x-axis) and \textbf{fragility} (color).
+
+Institutions in the \textbf{upper-right} have both high connectivity and high DebtRank --- they are central to the network and their failure would cause widespread damage.
+The color shows capital ratio: \textbf{red dots} (low capital) in this region are the most dangerous combination --- highly connected AND poorly capitalized.
+
+The GCN captures both dimensions simultaneously: unlike simple centrality measures, it aggregates features from multi-hop neighbors, learning that a well-capitalized node connected only to fragile counterparties is itself at risk (contagion propagation).
+\end{interpbox}
+
+\newpage
+
+%% ============================================================================
 \section*{Technical Summary}
 %% ============================================================================
 
@@ -536,8 +585,9 @@ Basel III requires banks to identify and separately capitalize wrong-way risk ex
 07 & Stress Testing               & 14 & DFAST, historical replay, reverse stress testing \\
 08 & Deep Hedging                 & 13 & Neural network hedging, CVaR optimization \\
 09 & CVA Counterparty Risk        & 14 & Exposure profiles, netting, wrong-way risk \\
+10 & GNN Credit Contagion         & 18 & Eisenberg-Noe, DebtRank, graph convolutional network \\
 \addlinespace
-   & \textbf{Total}               & \textbf{132} & \textbf{16{,}000+ lines of tested, typed Python} \\
+   & \textbf{Total}               & \textbf{150} & \textbf{18{,}000+ lines of tested, typed Python} \\
 \bottomrule
 \end{tabular}
 \end{center}

@@ -1,0 +1,1061 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{example}{Example}[section]
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% Colored boxes
+\newtcolorbox{keyresult}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={Key Insight},
+    #1
+}
+\newtcolorbox{warningbox}[1][]{
+    colback=red!5!white,
+    colframe=red!60!black,
+    fonttitle=\bfseries,
+    title={Warning},
+    #1
+}
+\newtcolorbox{refbox}[1][]{
+    colback=gray!5!white,
+    colframe=gray!50!black,
+    fonttitle=\bfseries,
+    title={Go Deeper},
+    #1
+}
+\newtcolorbox{keyidea}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title={Core Idea},
+    #1
+}
+\newtcolorbox{prereq}[1][]{
+    colback=orange!5!white,
+    colframe=orange!60!black,
+    fonttitle=\bfseries,
+    title={Read Before Coding},
+    #1
+}
+\newtcolorbox{objective}[1][]{
+    colback=blue!5!white,
+    colframe=blue!60!black,
+    fonttitle=\bfseries,
+    title={What You Will Build},
+    #1
+}
+
+% Custom commands
+\newcommand{\VaR}{\operatorname{VaR}}
+\newcommand{\CoVaR}{\operatorname{CoVaR}}
+\newcommand{\SRISK}{\operatorname{SRISK}}
+\newcommand{\EV}{\mathbb{E}}
+\newcommand{\PV}{\mathbb{P}}
+\newcommand{\RV}{\mathbb{R}}
+\newcommand{\ind}{\boldsymbol{1}}
+\newcommand{\GCN}{\operatorname{GCN}}
+\newcommand{\softmax}{\operatorname{softmax}}
+\newcommand{\sigmoid}{\operatorname{sigmoid}}
+\newcommand{\ReLU}{\operatorname{ReLU}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\DebtRank}{\operatorname{DebtRank}}
+
+\title{%
+    \textbf{Graph Neural Networks for Credit Contagion} \\[0.5em]
+    \large Modeling Systemic Risk Through Financial Networks
+}
+\author{Andr\'es Gonz\'alez Ortega}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An applied treatment of Graph Neural Networks (GNNs) for modeling credit contagion
+in financial networks.
+Traditional credit risk models treat defaults as independent events or assume
+dependence arises only from common macroeconomic factors.
+The 2008 financial crisis demonstrated that interconnectedness itself is a source
+of systemic risk: defaults cascade through networks of financial obligations.
+We develop the framework from first principles: why network structure matters for
+credit risk; how financial networks are represented as directed, weighted graphs;
+the mechanisms of direct, fire-sale, and funding contagion; how GNNs learn
+node-level representations by aggregating neighborhood information; Graph Convolutional
+Networks (GCNs) for default prediction; the Eisenberg--Noe clearing mechanism for
+generating cascade labels; and systemic risk metrics including DebtRank, CoVaR,
+and SRISK\@.
+A worked example runs throughout: a 50-node interbank network where GCN layers
+propagate risk signals across the graph to predict which institutions default
+following an exogenous shock.
+We assume familiarity with neural networks, basic graph theory, and credit risk
+fundamentals.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================================
+\section{Why Networks Matter for Credit Risk}
+\label{sec:why-networks}
+%% ============================================================================
+
+Consider a stylized banking system with three banks: $A$, $B$, and $C$.
+Bank~$A$ has lent \$500 million to Bank~$B$, and Bank~$B$ has lent \$400 million
+to Bank~$C$.
+An exogenous shock wipes out Bank~$C$'s assets.
+Bank~$C$ defaults.
+Bank~$B$ now loses \$400 million --- if this exceeds $B$'s capital buffer, $B$
+defaults too.
+Bank~$A$ then loses its \$500 million exposure to $B$, and the cascade continues.
+
+This is \textbf{credit contagion}: the propagation of financial distress through a
+network of contractual obligations.
+
+\subsection{The Independence Assumption and Its Failure}
+
+Traditional credit risk models rest on assumptions about how defaults are correlated:
+
+\begin{itemize}
+    \item \textbf{Merton (1974)}: each firm defaults when its asset value falls below
+          its liabilities.
+          Correlations arise from shared exposure to systematic factors (market returns).
+          But the model treats each firm as an isolated entity --- it does not account
+          for the contractual links between them.
+    \item \textbf{CreditRisk+ (Credit Suisse, 1997)}: defaults are driven by
+          independent Poisson processes, modulated by common risk factors.
+          Dependencies come from shared factors, not from direct financial linkages.
+    \item \textbf{Gaussian copula models}: a correlation parameter $\rho$ controls
+          joint default probabilities, but the correlation is uniform and does not
+          reflect the \emph{topology} of who owes whom.
+\end{itemize}
+
+These models capture the idea that a recession can cause many defaults simultaneously.
+What they miss is that defaults cause other defaults \emph{mechanically}: through the
+network of exposures.
+
+\begin{warningbox}
+The 2008 financial crisis provided a devastating empirical demonstration.
+Lehman Brothers filed for bankruptcy on 15 September 2008 with approximately
+930{,}000 derivative contracts outstanding.
+Its default did not just cause losses at its direct counterparties --- it triggered
+a chain reaction.
+Counterparties that lost money on Lehman exposures became weaker, their creditors
+became nervous, liquidity evaporated, and asset prices collapsed.
+The total systemic losses far exceeded the direct losses on Lehman exposures.
+\textbf{Interconnectedness amplified a single default into a global crisis.}
+\end{warningbox}
+
+\subsection{What Networks Add}
+
+A network representation captures what traditional models cannot:
+\begin{enumerate}
+    \item \textbf{Direct linkages}: who owes money to whom, and how much.
+    \item \textbf{Concentration risk}: if many institutions are exposed to the
+          same counterparty, a single default can trigger widespread losses.
+    \item \textbf{Cascade dynamics}: a default at node $i$ reduces the assets of
+          node $i$'s creditors, potentially causing them to default, which in turn
+          affects \emph{their} creditors.
+    \item \textbf{Topology matters}: a highly connected ``hub'' bank failing is
+          far more dangerous than a peripheral institution failing.
+          Network centrality measures quantify this.
+\end{enumerate}
+
+\begin{keyidea}
+Credit risk is not just about individual balance sheets.
+It is about the \textbf{structure of obligations} between institutions.
+Two banking systems with identical individual bank characteristics but different
+network topologies can have dramatically different systemic risk profiles.
+A network with a single highly connected hub is more fragile than a diversified
+network with many moderate connections.
+\end{keyidea}
+
+\subsection{The Contribution of This Project}
+
+We combine two powerful ideas:
+\begin{enumerate}
+    \item \textbf{Financial network models} (Eisenberg--Noe, DebtRank) that simulate
+          how shocks cascade through interbank exposures.
+    \item \textbf{Graph Neural Networks} that learn to predict which institutions
+          will default by aggregating information across the network topology.
+\end{enumerate}
+
+The GNN approach is attractive because it can learn \emph{non-linear} contagion
+patterns that simple cascade models may miss, and it can generalize to networks
+with different topologies once trained.
+
+%% ============================================================================
+\section{Financial Networks}
+\label{sec:financial-networks}
+%% ============================================================================
+
+A financial network is a directed, weighted graph $G = (V, E, W)$ where:
+\begin{itemize}
+    \item $V = \{1, 2, \ldots, n\}$ is the set of \textbf{nodes} (institutions:
+          banks, insurance companies, hedge funds, corporates).
+    \item $E \subseteq V \times V$ is the set of \textbf{directed edges} representing
+          financial obligations.
+    \item $W: E \to \RV_{>0}$ assigns a \textbf{weight} $w_{ij}$ to each edge
+          $(i, j)$, representing the nominal value of $i$'s obligation to $j$
+          (equivalently, $j$'s exposure to $i$).
+\end{itemize}
+
+\subsection{Types of Financial Linkages}
+
+Multiple types of edges can coexist in a financial network:
+
+\begin{center}
+\begin{tabular}{@{}p{3.5cm}p{4cm}p{5cm}@{}}
+\toprule
+\textbf{Linkage Type} & \textbf{Edge Meaning} & \textbf{Example} \\
+\midrule
+Interbank lending     & Bank $i$ has borrowed from bank $j$
+                      & Overnight lending, term deposits \\[4pt]
+Derivative exposures  & Bank $i$ owes mark-to-market to $j$
+                      & Interest rate swaps, CDS contracts \\[4pt]
+Payment systems       & Bank $i$ sends payments through $j$
+                      & Fedwire, TARGET2 \\[4pt]
+Supply chain          & Firm $i$ supplies goods to firm $j$
+                      & Trade credit, accounts receivable \\[4pt]
+Common asset holdings & $i$ and $j$ hold overlapping portfolios
+                      & Indirect link via fire-sale channel \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{The Liability Matrix}
+
+The network is compactly represented by an $n \times n$ \textbf{liability matrix}
+$L$, where $L_{ij}$ is the total obligation of institution $i$ to institution $j$:
+\begin{equation}\label{eq:liability-matrix}
+    L = \begin{pmatrix}
+        0      & L_{12} & \cdots & L_{1n} \\
+        L_{21} & 0      & \cdots & L_{2n} \\
+        \vdots & \vdots & \ddots & \vdots \\
+        L_{n1} & L_{n2} & \cdots & 0
+    \end{pmatrix}
+\end{equation}
+The diagonal is zero (no self-obligations).
+The total interbank liabilities of node $i$ are $\bar{p}_i = \sum_{j=1}^{n} L_{ij}$,
+and the total interbank assets of node $i$ are $\sum_{j=1}^{n} L_{ji}$.
+
+Each institution also has \textbf{external assets} $e_i$ (assets not related to
+interbank claims) and \textbf{external liabilities} $d_i$ (deposits, bonds,
+obligations to non-bank creditors).
+
+\subsection{Topological Metrics}
+
+Network topology determines how shocks propagate.
+The following centrality measures quantify the importance of each node:
+
+\begin{definition}[Centrality Measures]\label{def:centrality}
+For a weighted directed graph with adjacency matrix $A$ (where $A_{ij} = w_{ij}$
+if edge $(i,j)$ exists, 0 otherwise):
+\begin{enumerate}
+    \item \textbf{Degree centrality}: the number of connections.
+          In-degree $k_i^{\text{in}} = \sum_j A_{ji}$ counts incoming edges
+          (exposures \emph{to} $i$).
+          Out-degree $k_i^{\text{out}} = \sum_j A_{ij}$ counts outgoing edges
+          ($i$'s obligations).
+    \item \textbf{Betweenness centrality}: the fraction of shortest paths between
+          all pairs of nodes that pass through node $i$.
+          A high-betweenness node is a critical intermediary; its failure disrupts
+          many channels.
+    \item \textbf{Eigenvector centrality}: solves $Ax = \lambda x$.
+          A node is important if it is connected to other important nodes.
+          The eigenvector corresponding to the largest eigenvalue assigns a centrality
+          score to each node.
+\end{enumerate}
+\end{definition}
+
+\begin{example}[Core-periphery structure]\label{ex:core-periphery}
+Empirical interbank networks consistently exhibit \textbf{core-periphery structure}:
+
+\begin{itemize}
+    \item A small \textbf{core} of 10--15 major banks that are densely connected
+          to each other (high degree, high betweenness).
+    \item A large \textbf{periphery} of smaller institutions that connect to one or
+          two core banks but not to each other.
+\end{itemize}
+
+This structure has important implications for contagion:
+\begin{itemize}
+    \item A core bank failing can propagate shocks to many peripheral banks
+          simultaneously.
+    \item A peripheral bank failing typically affects only one or two core banks,
+          which can usually absorb the loss.
+    \item The system is robust to random peripheral failures but fragile to
+          targeted core failures --- the ``robust-yet-fragile'' property
+          (Acemoglu, Ozdaglar \& Tahbaz-Salehi, 2015).
+\end{itemize}
+\end{example}
+
+\subsection{Node Features}
+
+Beyond topology, each node carries \textbf{features} that determine its resilience
+to shocks.
+For a GNN, these form the initial node feature matrix $X \in \RV^{n \times d}$
+where $d$ is the number of features per node:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Feature} & \textbf{Symbol} & \textbf{Interpretation} \\
+\midrule
+Capital ratio       & $x_1$ & Equity / total assets; buffer against losses \\
+Leverage            & $x_2$ & Total assets / equity; amplifies shocks \\
+Asset quality       & $x_3$ & Non-performing loans / total loans \\
+Size (log assets)   & $x_4$ & Systemic importance proxy \\
+Liquidity ratio     & $x_5$ & Liquid assets / short-term liabilities \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A bank with a high capital ratio and low leverage can absorb larger losses before
+defaulting.
+The GNN will learn to combine these features with the network structure.
+
+\begin{keyresult}
+A financial network is fully described by three components:
+\begin{enumerate}
+    \item \textbf{Topology} --- the adjacency/liability matrix $L$: who owes whom,
+          how much.
+    \item \textbf{Node features} --- the feature matrix $X$: balance sheet
+          characteristics of each institution.
+    \item \textbf{External variables} --- external assets $e_i$ and liabilities $d_i$
+          that anchor each institution's solvency outside the network.
+\end{enumerate}
+The GNN operates on all three simultaneously.
+\end{keyresult}
+
+%% ============================================================================
+\section{Contagion Mechanisms}
+\label{sec:contagion}
+%% ============================================================================
+
+Financial contagion operates through several distinct channels.
+Understanding these channels is essential for designing the cascade simulation
+that generates training labels for the GNN.
+
+\subsection{Direct (Credit) Contagion}
+
+The most transparent mechanism: institution $A$ defaults on its obligations,
+and institution $B$, which is owed money by $A$, suffers a loss equal to its
+exposure (net of recovery).
+
+Formally, if institution $i$ defaults and $j$ has an exposure $L_{ij}$ to $i$
+with recovery rate $R$, then $j$'s loss is:
+\begin{equation}\label{eq:direct-loss}
+    \ell_j = (1 - R) \cdot L_{ij}
+\end{equation}
+If $\ell_j$ exceeds $j$'s capital buffer $c_j$, then $j$ defaults as well,
+and the cascade continues.
+
+\begin{keyidea}
+Direct contagion is a \textbf{domino effect}.
+The key insight from Eisenberg \& Noe (2001) is that we cannot simply iterate
+default-by-default, because obligations are \emph{simultaneous}: when $i$ defaults,
+it may only partially pay its creditors, and the partial payment depends on how
+much $i$ receives from \emph{its} debtors, who may themselves be defaulting.
+This circular dependency requires solving for a \textbf{clearing payment vector}
+--- a fixed-point problem.
+\end{keyidea}
+
+\subsubsection{The Eisenberg--Noe Clearing Mechanism}
+
+Consider $n$ institutions with interbank liability matrix $L$.
+Let $\bar{p}_i = \sum_{j} L_{ij}$ be the total interbank obligations of node~$i$,
+and define the \textbf{relative liability matrix}:
+\begin{equation}\label{eq:relative-liability}
+    \Pi_{ij} = \frac{L_{ij}}{\bar{p}_i} \quad \text{for } \bar{p}_i > 0
+\end{equation}
+so that $\Pi_{ij}$ is the fraction of $i$'s total interbank obligations owed to $j$.
+
+Each institution $i$ has external assets $e_i$ (cash, securities, loans to the
+real economy).
+The total resources available to $i$ are its external assets plus whatever it
+receives from other institutions:
+\begin{equation}\label{eq:total-resources}
+    a_i(p) = e_i + \sum_{j=1}^{n} \Pi_{ji}\, p_j
+\end{equation}
+where $p_j$ is the actual payment made by institution $j$.
+
+\begin{definition}[Clearing Payment Vector]\label{def:clearing}
+A payment vector $p^* = (p_1^*, \ldots, p_n^*)$ is a \textbf{clearing vector} if
+for each institution $i$:
+\begin{equation}\label{eq:clearing}
+    p_i^* = \min\!\bigl(\bar{p}_i,\; a_i(p^*)\bigr)
+    = \min\!\left(\bar{p}_i,\; e_i + \sum_{j=1}^{n} \Pi_{ji}\, p_j^*\right)
+\end{equation}
+That is, each institution pays the minimum of what it owes ($\bar{p}_i$) and what
+it has ($a_i$).
+If $a_i(p^*) < \bar{p}_i$, institution $i$ is in \textbf{default} and pays pro
+rata to its creditors.
+\end{definition}
+
+\begin{theorem}[Eisenberg \& Noe, 2001]\label{thm:eisenberg-noe}
+Under mild regularity conditions (the financial system has no cycles of institutions
+with zero external assets), the clearing payment vector $p^*$ exists and is unique.
+It can be computed by the following \textbf{fixed-point iteration} (``fictitious
+default algorithm''):
+
+\begin{enumerate}
+    \item Initialize $p^{(0)} = \bar{p}$ (every institution pays in full).
+    \item At each iteration $k$, compute:
+    \[
+        p_i^{(k+1)} = \min\!\left(\bar{p}_i,\; e_i + \sum_{j=1}^{n} \Pi_{ji}\, p_j^{(k)}\right)
+    \]
+    \item Repeat until convergence: $\|p^{(k+1)} - p^{(k)}\| < \varepsilon$.
+\end{enumerate}
+
+The sequence $p^{(0)} \geq p^{(1)} \geq \cdots$ is non-increasing and converges
+to $p^*$ in at most $n$ iterations (each iteration identifies at least one new
+defaulting institution).
+\end{theorem}
+
+\begin{example}[Three-bank clearing]\label{ex:three-bank}
+Three banks with liabilities:
+\[
+    L = \begin{pmatrix} 0 & 80 & 0 \\ 0 & 0 & 60 \\ 40 & 0 & 0 \end{pmatrix}
+\]
+So bank~1 owes 80 to bank~2, bank~2 owes 60 to bank~3, bank~3 owes 40 to bank~1.
+External assets: $e_1 = 100$, $e_2 = 50$, $e_3 = 30$.
+
+\textbf{No shock}: total assets of bank~1 = $e_1 + $ received from bank~3 = $100 + 40 = 140 > 80$
+(pays in full).
+Bank~2 = $50 + 80 = 130 > 60$ (pays in full).
+Bank~3 = $30 + 60 = 90 > 40$ (pays in full).
+No defaults.
+
+\textbf{Shock}: reduce $e_1$ to 20 (asset loss of 80).
+Now bank~1's total assets = $20 + 40 = 60 < 80$ (default; pays 60 pro rata to bank~2).
+Bank~2 receives 60 instead of 80; total assets = $50 + 60 = 110 > 60$ (survives).
+Bank~3 receives 60 from bank~2; total assets = $30 + 60 = 90 > 40$ (survives).
+\textbf{One default}, no cascade.
+
+\textbf{Larger shock}: reduce $e_1$ to 0.
+Bank~1's total assets = $0 + 40 = 40 < 80$ (default; pays 40).
+Bank~2 receives 40; total assets = $50 + 40 = 90 > 60$ (survives).
+Still only one default, because bank~2 is well-capitalized.
+\end{example}
+
+\subsection{Fire-Sale Contagion}
+
+When a distressed institution is forced to sell illiquid assets quickly, the sales
+depress market prices.
+Other institutions holding the same assets suffer mark-to-market losses even though
+they are not directly connected to the distressed institution.
+
+Let $\Delta q_k$ be the quantity of asset $k$ sold by the distressed institution.
+If the price impact function is linear, the new price is:
+\begin{equation}\label{eq:fire-sale}
+    p_k' = p_k\!\left(1 - \frac{\Delta q_k}{\text{ADV}_k}\right)
+\end{equation}
+where $\text{ADV}_k$ is the average daily volume of asset $k$.
+All institutions holding asset $k$ suffer a loss proportional to their holdings.
+
+\begin{warningbox}
+Fire-sale contagion is particularly dangerous because it operates through
+\textbf{indirect linkages}: two institutions that have no direct contractual
+relationship can infect each other if they hold overlapping portfolios.
+This channel was central to the 2008 crisis, when forced selling of
+mortgage-backed securities caused prices to spiral downward, inflicting
+losses on institutions far removed from the original subprime defaults.
+\end{warningbox}
+
+\subsection{Funding (Liquidity) Contagion}
+
+When an institution is perceived as risky, its funding counterparties may:
+\begin{itemize}
+    \item Refuse to roll over short-term funding (commercial paper, repo).
+    \item Demand higher collateral (margin calls).
+    \item Withdraw deposits.
+\end{itemize}
+
+This creates a self-fulfilling prophecy: the institution's liquidity position
+deteriorates, forcing asset sales (fire-sale channel) or outright default,
+even if it is fundamentally solvent.
+Northern Rock (2007) and Bear Stearns (2008) exemplify pure funding contagion.
+
+\begin{keyresult}
+The three contagion channels interact and amplify each other:
+\begin{enumerate}
+    \item \textbf{Direct contagion} causes credit losses at counterparties.
+    \item Weakened counterparties are forced to sell assets (\textbf{fire-sale contagion}).
+    \item Market participants observe distress and withdraw funding
+          (\textbf{funding contagion}).
+    \item Funding withdrawal forces more asset sales, depressing prices further.
+\end{enumerate}
+For our GNN implementation, we focus on direct contagion via the Eisenberg--Noe
+mechanism, as it is the most natural fit for graph-structured data.
+The GNN's message-passing layers can implicitly learn patterns that echo
+fire-sale and funding dynamics through shared features.
+\end{keyresult}
+
+%% ============================================================================
+\section{Graph Neural Networks: The Key Idea}
+\label{sec:gnn-key-idea}
+%% ============================================================================
+
+A Graph Neural Network learns representations of nodes (or edges, or the entire
+graph) by \textbf{iteratively aggregating information from neighboring nodes}.
+At each layer, a node's representation is updated based on its own features
+\emph{and} the features of its neighbors.
+
+\subsection{Why GNNs Fit Contagion}
+
+Consider why this architecture is a natural match for credit contagion:
+\begin{itemize}
+    \item The risk of institution $i$ depends on the health of institutions
+          \emph{connected to $i$} (its direct counterparties).
+    \item But it also depends on the health of institutions connected to $i$'s
+          counterparties (indirect exposure, two hops away).
+    \item And so on, for longer chains of exposure.
+\end{itemize}
+
+A GNN with $k$ layers captures exactly $k$-hop neighborhood information.
+After one layer, each node ``knows'' about its direct neighbors.
+After two layers, each node has incorporated information from two-hop neighbors.
+This mirrors how contagion propagates: one round of defaults, then second-round
+effects, then third-round effects.
+
+\begin{keyidea}
+The message-passing mechanism in a GNN is a \textbf{learned analogue of cascade
+simulation}.
+Where the Eisenberg--Noe model uses a fixed rule (``pay what you can''),
+the GNN learns a parametric aggregation function from data.
+This allows it to capture non-linear interactions, heterogeneous node responses,
+and patterns that a simple threshold model may miss.
+\end{keyidea}
+
+\subsection{The Message-Passing Framework}
+
+All GNN architectures follow the same abstract \textbf{message-passing} pattern.
+For each node $i$ at layer $l$:
+
+\begin{equation}\label{eq:message-passing}
+    h_i^{(l+1)} = \phi\!\left(h_i^{(l)},\; \bigoplus_{j \in \mathcal{N}(i)} \psi\!\left(h_i^{(l)}, h_j^{(l)}, e_{ij}\right)\right)
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $h_i^{(l)} \in \RV^{d_l}$ is the \textbf{embedding} (hidden representation) of
+          node $i$ at layer $l$.
+          At layer 0, $h_i^{(0)} = x_i$ (the raw node features).
+    \item $\mathcal{N}(i)$ is the set of \textbf{neighbors} of node $i$.
+    \item $\psi(\cdot)$ is the \textbf{message function}: it computes a ``message''
+          from neighbor $j$ to node $i$, potentially using the edge weight $e_{ij}$.
+    \item $\bigoplus$ is an \textbf{aggregation operator} (sum, mean, max) that
+          combines messages from all neighbors into a single vector.
+    \item $\phi(\cdot)$ is the \textbf{update function}: it combines the aggregated
+          messages with the node's current embedding to produce the new embedding.
+\end{itemize}
+
+Different GNN architectures correspond to different choices of $\psi$, $\bigoplus$,
+and $\phi$.
+
+\subsection{Key Architectures}
+
+\begin{definition}[GCN --- Kipf \& Welling, 2017]\label{def:gcn}
+The Graph Convolutional Network uses a simple spectral-inspired aggregation:
+\begin{equation}\label{eq:gcn-layer}
+    H^{(l+1)} = \sigma\!\left(\tilde{D}^{-1/2}\, \tilde{A}\, \tilde{D}^{-1/2}\, H^{(l)}\, W^{(l)}\right)
+\end{equation}
+where $\tilde{A} = A + I$ (adjacency matrix with added self-loops),
+$\tilde{D}$ is the degree matrix of $\tilde{A}$
+($\tilde{D}_{ii} = \sum_j \tilde{A}_{ij}$),
+$H^{(l)} \in \RV^{n \times d_l}$ is the node feature matrix at layer $l$,
+$W^{(l)} \in \RV^{d_l \times d_{l+1}}$ is a learnable weight matrix,
+and $\sigma$ is a non-linear activation function (typically $\ReLU$).
+\end{definition}
+
+\begin{definition}[GraphSAGE --- Hamilton et al., 2017]\label{def:graphsage}
+GraphSAGE samples a fixed number of neighbors and learns an aggregation function:
+\begin{align}
+    h_{\mathcal{N}(i)}^{(l)} &= \text{AGGREGATE}\!\left(\{h_j^{(l)} : j \in \mathcal{N}(i)\}\right) \label{eq:sage-agg}\\
+    h_i^{(l+1)} &= \sigma\!\left(W^{(l)} \cdot \bigl[h_i^{(l)} \,\|\, h_{\mathcal{N}(i)}^{(l)}\bigr]\right) \label{eq:sage-update}
+\end{align}
+where $\|$ denotes concatenation and AGGREGATE can be mean, LSTM, or max-pooling.
+The concatenation of self-features with neighbor-features explicitly separates
+the node's own information from its neighborhood signal.
+\end{definition}
+
+\begin{definition}[GAT --- Veli\v{c}kovi\'c et al., 2018]\label{def:gat}
+The Graph Attention Network learns attention weights that determine how much
+each neighbor contributes:
+\begin{align}
+    \alpha_{ij} &= \frac{\exp\!\bigl(\text{LeakyReLU}(a^T [W h_i \,\|\, W h_j])\bigr)}{\sum_{k \in \mathcal{N}(i)} \exp\!\bigl(\text{LeakyReLU}(a^T [W h_i \,\|\, W h_k])\bigr)} \label{eq:gat-attn}\\[4pt]
+    h_i^{(l+1)} &= \sigma\!\left(\sum_{j \in \mathcal{N}(i)} \alpha_{ij}\, W\, h_j^{(l)}\right) \label{eq:gat-update}
+\end{align}
+where $a$ is a learnable attention vector.
+The attention weights $\alpha_{ij}$ allow the model to focus on the most
+relevant neighbors --- for credit contagion, it might learn to pay more attention
+to highly leveraged counterparties.
+\end{definition}
+
+\begin{remark}
+For credit contagion, GAT is conceptually appealing because not all counterparties
+are equally dangerous.
+A highly leveraged neighbor is a greater contagion risk than a well-capitalized one.
+Attention weights can learn this distinction from data without explicit feature
+engineering.
+\end{remark}
+
+%% ============================================================================
+\section{GCN for Default Prediction}
+\label{sec:gcn-default}
+%% ============================================================================
+
+We now develop the specific GCN architecture for predicting which nodes in a
+financial network will default following an exogenous shock.
+
+\subsection{Problem Formulation}
+
+\textbf{Given}:
+\begin{itemize}
+    \item A financial network $G = (V, E)$ with $n$ nodes.
+    \item Adjacency matrix $A \in \RV^{n \times n}$ (derived from the liability matrix;
+          $A_{ij} = 1$ if $L_{ij} > 0$, or $A_{ij} = L_{ij}$ for a weighted graph).
+    \item Node feature matrix $X \in \RV^{n \times d}$ with $d$ features per node
+          (capital ratio, leverage, asset quality, size, liquidity ratio).
+    \item A shock scenario $s$ that reduces the external assets of one or more nodes.
+\end{itemize}
+
+\textbf{Predict}: for each node $i$, the probability $\hat{y}_i \in [0, 1]$ that
+node $i$ defaults under shock scenario $s$.
+
+This is a \textbf{node-level binary classification} task on a graph.
+
+\subsection{Two-Layer GCN Architecture}
+
+We use a two-layer GCN, which captures information from 2-hop neighborhoods:
+
+\textbf{Layer 1} (feature extraction):
+\begin{equation}\label{eq:gcn-layer1}
+    H^{(1)} = \ReLU\!\left(\tilde{D}^{-1/2}\, \tilde{A}\, \tilde{D}^{-1/2}\, X\, W^{(0)}\right)
+\end{equation}
+This maps from the original $d = 5$ features to a hidden dimension $d_1 = 16$.
+So $W^{(0)} \in \RV^{5 \times 16}$.
+
+\textbf{Layer 2} (classification):
+\begin{equation}\label{eq:gcn-layer2}
+    Z = \sigmoid\!\left(\tilde{D}^{-1/2}\, \tilde{A}\, \tilde{D}^{-1/2}\, H^{(1)}\, W^{(1)}\right)
+\end{equation}
+This maps from the hidden dimension $d_1 = 16$ to a single output.
+So $W^{(1)} \in \RV^{16 \times 1}$, and $Z \in \RV^{n \times 1}$ contains the
+predicted default probabilities.
+
+The sigmoid activation in the final layer ensures outputs are in $[0, 1]$.
+
+\subsection{What the Normalization Does}
+
+The symmetric normalization $\tilde{D}^{-1/2}\, \tilde{A}\, \tilde{D}^{-1/2}$
+has an intuitive interpretation.
+For each node $i$, it computes a weighted average of its neighbors' features
+(including its own, via the self-loop in $\tilde{A}$):
+
+\begin{equation}\label{eq:gcn-nodeview}
+    h_i^{(l+1)} = \sigma\!\left(\sum_{j \in \mathcal{N}(i) \cup \{i\}}
+    \frac{1}{\sqrt{\tilde{d}_i\, \tilde{d}_j}}\; h_j^{(l)}\; W^{(l)}\right)
+\end{equation}
+
+where $\tilde{d}_i = 1 + \sum_j A_{ij}$ is the degree of node $i$ in the
+augmented graph.
+The $1/\sqrt{\tilde{d}_i\, \tilde{d}_j}$ factor normalizes by the degrees of both
+the sending and receiving nodes, preventing high-degree nodes from dominating
+the aggregation.
+
+\begin{example}[Worked example: 50-node network]\label{ex:50-node}
+Consider a synthetic interbank network with $n = 50$ nodes and $d = 5$ features
+per node.
+
+\textbf{Network}: generated with a core-periphery structure.
+10 core banks are densely connected (edge probability 0.7 within core).
+40 peripheral banks each connect to 1--3 core banks.
+Total edges: approximately 100.
+
+\textbf{Features}: for each node, we generate $x_i \in \RV^5$:
+capital ratio (mean 0.08, std 0.03), leverage (mean 15, std 5),
+NPL ratio (mean 0.03, std 0.02), log-assets (mean 10, std 2),
+liquidity ratio (mean 0.25, std 0.10).
+
+\textbf{Architecture}:
+\begin{itemize}
+    \item Input: $X \in \RV^{50 \times 5}$.
+    \item Layer 1: $H^{(1)} = \ReLU(\hat{A}\, X\, W^{(0)}) \in \RV^{50 \times 16}$,
+          where $\hat{A} = \tilde{D}^{-1/2}\tilde{A}\tilde{D}^{-1/2}$.
+    \item Layer 2: $Z = \sigmoid(\hat{A}\, H^{(1)}\, W^{(1)}) \in \RV^{50 \times 1}$.
+\end{itemize}
+
+\textbf{Parameters}: $W^{(0)}$ has $5 \times 16 = 80$ entries, $W^{(1)}$ has
+$16 \times 1 = 16$ entries.
+Total learnable parameters: \textbf{96}.
+This is remarkably compact --- the network structure provides the inductive bias
+that keeps the model small.
+
+\textbf{Training}: we generate 1{,}000 shock scenarios using the Eisenberg--Noe
+cascade simulation (Section~\ref{sec:cascade}), producing binary default labels
+for each node under each scenario.
+Train with binary cross-entropy loss and the Adam optimizer.
+\end{example}
+
+\subsection{Loss Function}
+
+The binary cross-entropy loss for node-level classification:
+\begin{equation}\label{eq:bce}
+    \mathcal{L} = -\frac{1}{n}\sum_{i=1}^{n}\Bigl[y_i \log \hat{y}_i + (1 - y_i)\log(1 - \hat{y}_i)\Bigr]
+\end{equation}
+where $y_i \in \{0, 1\}$ is the true default label (from the cascade simulation)
+and $\hat{y}_i = Z_i$ is the GCN's predicted default probability.
+
+\begin{warningbox}
+Default events are typically \textbf{rare}: in a 50-node network, a typical shock
+might cause 2--5 defaults.
+This means the dataset is heavily imbalanced (90\%+ non-default labels).
+Standard remedies apply:
+\begin{itemize}
+    \item \textbf{Weighted loss}: increase the weight on the positive (default) class.
+    \item \textbf{Oversampling}: generate more severe shock scenarios to increase
+          the default rate.
+    \item \textbf{Focal loss}: down-weight easy (non-default) examples.
+\end{itemize}
+Without addressing class imbalance, the GCN may learn to predict ``no default''
+for every node and achieve high accuracy but zero recall.
+\end{warningbox}
+
+%% ============================================================================
+\section{Cascade Simulation}
+\label{sec:cascade}
+%% ============================================================================
+
+The cascade simulation generates the \textbf{training data} for the GNN\@.
+We simulate the Eisenberg--Noe clearing mechanism under many shock scenarios
+to produce binary default labels for each node.
+
+\subsection{Simulation Procedure}
+
+\begin{enumerate}
+    \item \textbf{Generate network}: create an $n$-node financial network with
+          realistic core-periphery topology.
+          Assign edge weights (interbank liabilities) and node features
+          (capital ratio, leverage, etc.).
+          Assign external assets $e_i$ to each node.
+
+    \item \textbf{Sample shock}: select one or more ``seed'' nodes to shock.
+          Reduce their external assets by a fraction $\delta \in [0, 1]$:
+          \begin{equation}\label{eq:shock}
+              e_i^{\text{shocked}} = (1 - \delta)\, e_i
+          \end{equation}
+          Vary $\delta$ and the choice of seed nodes across scenarios.
+
+    \item \textbf{Run clearing}: apply the Eisenberg--Noe fixed-point iteration
+          (Theorem~\ref{thm:eisenberg-noe}) to find the clearing payment vector $p^*$.
+
+    \item \textbf{Identify defaults}: institution $i$ is in default if
+          $p_i^* < \bar{p}_i$ (it cannot pay its obligations in full).
+          Assign label $y_i = 1$ (default) or $y_i = 0$ (solvent).
+
+    \item \textbf{Record}: store the tuple $(X, A, y)$ where $X$ is the
+          (potentially shocked) node feature matrix, $A$ is the adjacency matrix,
+          and $y \in \{0, 1\}^n$ is the vector of default labels.
+
+    \item \textbf{Repeat}: generate $M$ scenarios (e.g., $M = 1{,}000$) by varying
+          the shock location and severity.
+\end{enumerate}
+
+\subsection{Shock Design}
+
+The choice of shocks determines the diversity and difficulty of the training data:
+
+\begin{center}
+\begin{tabular}{@{}p{3.5cm}p{4cm}p{5cm}@{}}
+\toprule
+\textbf{Shock Type} & \textbf{Description} & \textbf{Purpose} \\
+\midrule
+Single-node         & Shock one randomly chosen node
+                    & Tests direct contagion from each node \\[4pt]
+Multi-node          & Shock 2--5 randomly chosen nodes
+                    & Tests overlapping cascades \\[4pt]
+Targeted core       & Shock a high-centrality core node
+                    & Tests worst-case systemic scenarios \\[4pt]
+Severity sweep      & Fix the shocked node, vary $\delta$ from 0.2 to 1.0
+                    & Maps the contagion threshold \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{example}[Cascade statistics]\label{ex:cascade-stats}
+For a 50-node core-periphery network with 10 core banks and 40 peripheral banks:
+
+\begin{center}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Shock scenario} & \textbf{Avg.\ defaults} & \textbf{Max defaults} \\
+\midrule
+Single peripheral, $\delta = 0.5$  & 1.2 & 3  \\
+Single peripheral, $\delta = 1.0$  & 1.8 & 5  \\
+Single core, $\delta = 0.5$        & 3.4 & 8  \\
+Single core, $\delta = 1.0$        & 6.1 & 15 \\
+Two core banks, $\delta = 0.8$     & 9.3 & 22 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Observation}: shocking a core bank produces far more cascading defaults
+than shocking a peripheral bank at the same severity.
+The network topology amplifies shocks that hit the core.
+\end{example}
+
+\begin{keyresult}
+The cascade simulation serves two purposes:
+\begin{enumerate}
+    \item \textbf{Training data}: the $(X, A, y)$ tuples are used to train the GCN
+          to predict defaults from node features and network topology.
+    \item \textbf{Benchmark}: the clearing mechanism provides ground-truth default
+          labels against which the GCN's predictions are evaluated.
+          If the GCN can learn to predict cascade outcomes accurately, it can be
+          used as a \textbf{fast surrogate} for the computationally expensive clearing
+          simulation --- enabling real-time systemic risk assessment.
+\end{enumerate}
+\end{keyresult}
+
+%% ============================================================================
+\section{Systemic Risk Metrics}
+\label{sec:systemic-metrics}
+%% ============================================================================
+
+Once we can simulate cascades (or predict them with a trained GNN), we can compute
+metrics that quantify the systemic importance of each institution and the overall
+fragility of the network.
+
+\subsection{DebtRank}
+
+DebtRank (Battiston et al., 2012) measures the fraction of total economic value
+in the network that is lost when a given institution enters distress.
+
+\begin{definition}[DebtRank]\label{def:debtrank}
+Let $v_i$ denote the total economic value (equity + interbank assets) of institution~$i$,
+and let $V = \sum_i v_i$ be the total system value.
+When institution $i$ is shocked into distress, the cascade propagates and
+causes losses at other institutions.
+Let $L_i^{\text{total}}$ be the total loss across the system (including at $i$
+itself).
+The DebtRank of institution $i$ is:
+\begin{equation}\label{eq:debtrank}
+    \DebtRank(i) = \frac{L_i^{\text{total}} - v_i}{V - v_i}
+\end{equation}
+This is the fraction of \textbf{other institutions'} value lost due to the distress
+of $i$.
+A DebtRank of 0 means $i$'s failure has no systemic impact.
+A DebtRank of 1 means $i$'s failure wipes out the entire rest of the system.
+\end{definition}
+
+The DebtRank computation uses a \emph{linear contagion} model: when institution $j$
+is exposed to distressed institution $i$, $j$'s equity is reduced proportionally
+to the exposure:
+\begin{equation}\label{eq:debtrank-prop}
+    h_j^{(t+1)} = \min\!\left(1,\; h_j^{(t)} + \sum_{i:\, s_i^{(t)} = \text{active}} W_{ji}\, h_i^{(t)}\right)
+\end{equation}
+where $h_i^{(t)} \in [0, 1]$ is the ``distress level'' of institution $i$ at
+round $t$, $W_{ji} = L_{ij} / v_j$ is the relative exposure of $j$ to $i$,
+and $s_i^{(t)}$ tracks whether $i$ is still actively propagating distress.
+
+\begin{remark}
+DebtRank differs from the Eisenberg--Noe model in a crucial way: it uses
+\textbf{continuous distress levels} $h_i \in [0, 1]$ rather than binary default.
+This captures the economic damage from a bank's stock price declining by 50\%
+(partial distress) even if it does not technically default.
+It is therefore a more sensitive measure of systemic impact.
+\end{remark}
+
+\subsection{CoVaR}
+
+CoVaR (Adrian \& Brunnermeier, 2016) measures the tail risk of the financial system
+conditional on the distress of a specific institution.
+
+\begin{definition}[CoVaR]\label{def:covar}
+The $\CoVaR_q^{j|i}$ is the $q$-quantile of the loss distribution of institution
+(or system) $j$, \textbf{conditional} on institution $i$ being in distress
+(typically defined as $i$'s return being at its $\VaR_q$ level):
+\begin{equation}\label{eq:covar}
+    \PV\!\left(X_j \leq \CoVaR_q^{j|i} \;\Big|\; X_i = \VaR_q^i\right) = q
+\end{equation}
+The systemic risk contribution of institution $i$ is:
+\begin{equation}\label{eq:delta-covar}
+    \Delta\CoVaR_q^{j|i} = \CoVaR_q^{j|i} - \CoVaR_q^{j|\text{median}(i)}
+\end{equation}
+This measures how much worse the system's tail risk becomes when institution $i$
+is in distress compared to when $i$ is at its median state.
+\end{definition}
+
+In our network context, $X_j$ can be the total system loss (sum of losses across
+all institutions), and we condition on institution $i$ being at or beyond its
+$\VaR$ threshold.
+The cascade simulation naturally produces these conditional distributions:
+run the cascade with $i$ shocked, record system-wide losses, and compute quantiles.
+
+\subsection{SRISK}
+
+SRISK measures the expected capital shortfall of an institution in a systemic crisis.
+
+\begin{definition}[SRISK]\label{def:srisk}
+\begin{equation}\label{eq:srisk}
+    \SRISK_i = \EV\!\bigl[\max\bigl(k \cdot A_i - E_i,\; 0\bigr) \;\big|\; \text{crisis}\bigr]
+\end{equation}
+where $k$ is a prudential capital ratio (e.g., 8\%), $A_i$ is the total assets of
+institution $i$ under the crisis scenario, and $E_i$ is its equity.
+$\SRISK_i > 0$ means institution $i$ would need a capital injection in a crisis.
+The total system SRISK, $\sum_i \SRISK_i$, is a measure of the system's overall
+capital shortfall and hence its vulnerability.
+\end{definition}
+
+\subsection{Using the GNN to Compute Systemic Metrics}
+
+Once the GCN is trained, it can serve as a fast proxy for the cascade simulation:
+
+\begin{enumerate}
+    \item \textbf{DebtRank via GNN}: for each node $i$, create a shock scenario
+          (reduce $i$'s capital), run the GCN to predict default probabilities
+          for all other nodes, and compute the expected system-wide loss.
+          This is orders of magnitude faster than running the full
+          Eisenberg--Noe clearing for each node.
+
+    \item \textbf{CoVaR via GNN}: generate many shock scenarios, use the GCN to
+          predict default outcomes, and compute the conditional VaR of system
+          losses given distress at node $i$.
+
+    \item \textbf{Stress testing}: apply a macroeconomic shock scenario (e.g.,
+          all banks' external assets decrease by 20\%), feed the shocked features
+          into the GCN, and obtain a real-time map of which institutions are
+          most likely to default.
+\end{enumerate}
+
+\begin{keyidea}
+The GNN is not just a prediction model --- it is a \textbf{computational accelerator}
+for systemic risk analysis.
+Full cascade simulations on large networks (thousands of nodes) are expensive.
+A trained GNN performs the same prediction in a single forward pass (two matrix
+multiplications), enabling real-time scenario analysis, interactive stress testing,
+and optimization of network structure for resilience.
+\end{keyidea}
+
+\begin{refbox}
+\begin{itemize}
+    \item For a rigorous treatment of DebtRank and its extensions, see
+          Bardoscia et al.\ (2017), ``Pathways towards instability in financial
+          networks,'' \textit{Nature Communications} 8, 14416.
+    \item For the connection between GNNs and financial stability analysis, see
+          the survey by Xu et al.\ (2021), ``Graph Neural Networks for Financial
+          Network Analysis.''
+    \item For the theoretical foundations of network contagion, see
+          Acemoglu, Ozdaglar \& Tahbaz-Salehi (2015), ``Systemic Risk and
+          Stability in Financial Networks,'' \textit{American Economic Review}
+          105(2), 564--608.
+\end{itemize}
+\end{refbox}
+
+%% ============================================================================
+\section{References}
+\label{sec:references}
+%% ============================================================================
+
+The following works provide the theoretical foundations for the models and methods
+developed in this document.
+
+\begin{enumerate}[label={[\arabic*]}, leftmargin=2cm]
+    \item \textbf{Eisenberg, L.\ \& Noe, T.H.}\ (2001).
+          ``Systemic Risk in Financial Systems.''
+          \emph{Management Science}, 47(2), 236--249.
+          The foundational clearing mechanism for interbank payment systems.
+          Proves existence and uniqueness of the clearing payment vector and establishes
+          the fixed-point algorithm used in Section~\ref{sec:cascade}.
+
+    \item \textbf{Battiston, S., Puliga, M., Kaushik, R., Tasca, P.\ \& Caldarelli, G.}\ (2012).
+          ``DebtRank: Too Central to Fail? Financial Networks, the FED and Systemic Risk.''
+          \emph{Scientific Reports}, 2, 541.
+          Introduces the DebtRank metric and applies it to the network of emergency
+          lending during the 2008 crisis, showing that the largest banks also had
+          the highest systemic impact.
+
+    \item \textbf{Kipf, T.N.\ \& Welling, M.}\ (2017).
+          ``Semi-Supervised Classification with Graph Convolutional Networks.''
+          \emph{Proceedings of ICLR 2017}.
+          The seminal GCN paper.
+          Derives the spectral motivation for the $\tilde{D}^{-1/2}\tilde{A}\tilde{D}^{-1/2}$
+          normalization and demonstrates its effectiveness on citation networks.
+
+    \item \textbf{Adrian, T.\ \& Brunnermeier, M.K.}\ (2016).
+          ``CoVaR.''
+          \emph{American Economic Review}, 106(7), 1705--1741.
+          Defines CoVaR and $\Delta$CoVaR as systemic risk measures and estimates
+          them for major financial institutions using quantile regression.
+
+    \item \textbf{Acemoglu, D., Ozdaglar, A.\ \& Tahbaz-Salehi, A.}\ (2015).
+          ``Systemic Risk and Stability in Financial Networks.''
+          \emph{American Economic Review}, 105(2), 564--608.
+          Shows that the relationship between connectivity and stability is
+          non-monotone: moderate diversification enhances stability, but beyond
+          a threshold, more connections propagate shocks more widely.
+
+    \item \textbf{Hamilton, W.L., Ying, R.\ \& Leskovec, J.}\ (2017).
+          ``Inductive Representation Learning on Large Graphs.''
+          \emph{Proceedings of NeurIPS 2017}.
+          Introduces GraphSAGE, a scalable GNN framework that samples and
+          aggregates neighborhood features.
+
+    \item \textbf{Veli\v{c}kovi\'c, P., Cucurull, G., Casanova, A., Romero, A.,
+          Li\`o, P.\ \& Bengio, Y.}\ (2018).
+          ``Graph Attention Networks.''
+          \emph{Proceedings of ICLR 2018}.
+          Introduces attention-based aggregation for GNNs, enabling learned
+          weighting of neighbor contributions.
+
+    \item \textbf{Bardoscia, M., Battiston, S., Caccioli, F.\ \& Caldarelli, G.}\ (2017).
+          ``Pathways towards instability in financial networks.''
+          \emph{Nature Communications}, 8, 14416.
+          Extends DebtRank to incorporate multiple contagion channels and shows
+          how small shocks can trigger large cascades through non-linear amplification.
+\end{enumerate}
+
+\begin{prereq}
+Before implementing the GCN for credit contagion in code, ensure you are comfortable with:
+\begin{itemize}
+    \item Basic graph theory: adjacency matrices, degree, paths, connected components.
+    \item Neural network fundamentals: forward pass, backpropagation, loss functions,
+          gradient descent.
+    \item PyTorch Geometric (or DGL): constructing graph data objects, defining GNN
+          layers, training loops.
+    \item Credit risk basics: default, recovery rate, capital adequacy, leverage.
+    \item Linear algebra: matrix multiplication, eigenvalues (for the spectral motivation
+          behind GCN).
+\end{itemize}
+\end{prereq}
+
+\vfill
+\hrule
+\smallskip
+\noindent\textit{Andr\'es Gonz\'alez Ortega --- Risk Analyst Project} \hfill \textit{March 2026}
+
+\end{document}
