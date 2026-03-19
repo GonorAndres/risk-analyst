@@ -16,9 +16,8 @@ Reference:
 from __future__ import annotations
 
 import numpy as np
-from numpy.typing import NDArray
-
 from gcn import GCN
+from numpy.typing import NDArray
 
 
 def binary_cross_entropy(

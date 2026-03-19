@@ -28,12 +28,11 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 REPO_ROOT = PROJECT_ROOT.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from risk_analyst.models.credit import compute_all_iv, information_value, woe_encode
-
-from data import generate_synthetic_credit_data, preprocess, train_test_split_temporal
 from evaluate import compute_gini, compute_ks_statistic
 from model import CreditScoreModel
 
+from data import generate_synthetic_credit_data, preprocess, train_test_split_temporal
+from risk_analyst.models.credit import compute_all_iv, information_value, woe_encode
 
 # ------------------------------------------------------------------
 # Fixtures

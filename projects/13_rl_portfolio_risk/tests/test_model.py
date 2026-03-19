@@ -7,12 +7,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from agent import PolicyNetwork
 from benchmarks import equal_weight, mean_variance, risk_parity, run_benchmark
 from environment import PortfolioEnv
 from trainer import compute_cvar, run_episode, train_rl_agent
-
 
 # ---------------------------------------------------------------------------
 # Shared synthetic data fixture

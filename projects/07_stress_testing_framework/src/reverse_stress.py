@@ -14,7 +14,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
-
 from transmission import MacroTransmissionModel
 
 

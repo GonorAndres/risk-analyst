@@ -9,22 +9,22 @@ Tests cover:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 from scipy import stats
-
-import sys
-from pathlib import Path
 
 # Add the project src to the path so we can import model.py
 _PROJECT_SRC = str(Path(__file__).resolve().parent.parent / "src")
 if _PROJECT_SRC not in sys.path:
     sys.path.insert(0, _PROJECT_SRC)
 
-from risk_analyst.measures.backtesting import backtest_var
-
 from model import RiskModel
+
+from risk_analyst.measures.backtesting import backtest_var
 
 SEED = 42
 

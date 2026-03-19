@@ -16,26 +16,22 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yaml
-
 from ngfs_data import (
     get_sector_carbon_intensity,
     load_ngfs_scenarios,
 )
 from physical_risk import (
     physical_loss_by_scenario,
-    temperature_damage_function,
 )
 from sobol_analysis import run_sobol_analysis
 from tcfd_metrics import (
     compute_financed_emissions,
-    compute_waci_path,
     tcfd_report,
 )
 from transition_risk import (
     transition_loss_by_scenario,
     waci,
 )
-
 
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs" / "default.yaml"
 

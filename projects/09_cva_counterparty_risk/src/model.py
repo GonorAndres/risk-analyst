@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from numpy.typing import NDArray
-
-from credit import hazard_rate_from_cds, survival_probability, default_probability
-from cva import compute_bilateral_cva, compute_cva, cva_by_netting_set
-from exposure import apply_collateral, compute_exposure_profiles
+from credit import default_probability, hazard_rate_from_cds
+from cva import compute_bilateral_cva, cva_by_netting_set
+from exposure import compute_exposure_profiles
 from instruments import InterestRateSwap, simulate_rate_paths
+from numpy.typing import NDArray
 
 
 class CVAModel:

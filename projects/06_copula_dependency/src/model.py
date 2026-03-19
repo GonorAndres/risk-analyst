@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from marginal import filter_marginals, inverse_pit
 
 from risk_analyst.models.copula import (
     clayton_copula_fit,
@@ -20,13 +21,9 @@ from risk_analyst.models.copula import (
     frank_copula_fit,
     gaussian_copula_fit,
     gumbel_copula_fit,
-    pit_transform,
     t_copula_fit,
     tail_dependence,
 )
-
-from marginal import filter_marginals, inverse_pit
-
 
 # Map family names to fitting functions
 _FIT_FUNCTIONS = {

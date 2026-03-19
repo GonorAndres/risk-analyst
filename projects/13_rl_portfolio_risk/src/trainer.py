@@ -13,10 +13,9 @@ Reference:
 from __future__ import annotations
 
 import numpy as np
-from numpy.typing import NDArray
-
 from agent import PolicyNetwork
 from environment import PortfolioEnv
+from numpy.typing import NDArray
 
 
 def compute_cvar(returns: NDArray[np.float64], alpha: float = 0.95) -> float:

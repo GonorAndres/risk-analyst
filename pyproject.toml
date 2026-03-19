@@ -99,7 +99,20 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
-ignore = ["E501"]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "N803",   # argument name should be lowercase (we use S, T, K, X for math notation)
+    "N806",   # variable name should be lowercase (same: mathematical conventions)
+    "N816",   # mixed-case variable in global scope (mathematical constants)
+    "E741",   # ambiguous variable name (l, I, O -- we use these in math)
+    "E402",   # module import not at top (conftest.py sys.path manipulation)
+    "F841",   # local variable assigned but never used (sometimes intentional in notebooks)
+    "B905",   # zip without explicit strict (not needed for our use cases)
+    "SIM108", # use ternary instead of if-else (readability preference)
+    "SIM102", # collapsible if (readability preference)
+    "E702",   # multiple statements on one line (notebooks use this for concise plots)
+    "B007",   # unused loop variable (intentional in some patterns)
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["risk_analyst"]

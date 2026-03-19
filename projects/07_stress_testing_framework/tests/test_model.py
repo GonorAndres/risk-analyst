@@ -10,12 +10,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
-from transmission import MacroTransmissionModel, stress_transition_matrix, portfolio_loss_under_migration
-from scenarios import get_dfast_scenarios, get_historical_scenarios, generate_stochastic_scenarios
-from reverse_stress import reverse_stress_test
 from model import StressTestFramework
-
+from reverse_stress import reverse_stress_test
+from scenarios import generate_stochastic_scenarios, get_dfast_scenarios, get_historical_scenarios
+from transmission import (
+    MacroTransmissionModel,
+    portfolio_loss_under_migration,
+    stress_transition_matrix,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures

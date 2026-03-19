@@ -19,12 +19,8 @@ import yaml
 from scipy import stats
 
 from risk_analyst.measures.var import historical_var, parametric_var
-from risk_analyst.models.conformal import (
-    conformal_prediction_interval,
-    split_conformal_threshold,
-)
 
-from .adaptive import AdaptiveConformalInference, generate_regime_data, run_aci_experiment
+from .adaptive import generate_regime_data, run_aci_experiment
 from .models import ConformalPD, ConformalVaR
 
 

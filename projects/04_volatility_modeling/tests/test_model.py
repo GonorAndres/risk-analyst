@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from diagnostics import ljung_box_test
+
+# Project-local imports (conftest.py adds project src/ to sys.path)
+from model import VolatilityModel
 
 from risk_analyst.models.volatility import (
     conditional_es,
@@ -16,11 +20,6 @@ from risk_analyst.models.volatility import (
     fit_gjr_garch,
     forecast_volatility,
 )
-
-# Project-local imports (conftest.py adds project src/ to sys.path)
-from model import VolatilityModel
-from diagnostics import ljung_box_test
-
 
 # ---------------------------------------------------------------------------
 # Helpers

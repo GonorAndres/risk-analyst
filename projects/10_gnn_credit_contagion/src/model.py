@@ -17,7 +17,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yaml
-
 from contagion import (
     eisenberg_noe_clearing,
     simulate_cascade,
@@ -49,7 +48,7 @@ def _load_config(config_path: str | None = None) -> dict:
         config_path = str(
             Path(__file__).parent.parent / "configs" / "default.yaml"
         )
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 

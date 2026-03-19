@@ -10,7 +10,8 @@ Reference: Glasserman (2003), Ch. 4 -- Variance Reduction Techniques.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -46,7 +47,7 @@ def antithetic_variates(
     averaged_paths : ndarray
         Element-wise average of original and antithetic paths.
     """
-    seed = kwargs.get("seed", None)
+    seed = kwargs.get("seed")
     rng = np.random.default_rng(seed)
 
     # Determine shapes by running the simulation once to get Z draws

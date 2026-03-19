@@ -13,11 +13,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yaml
-
 from environment import HedgingEnvironment
 from network import NeuralNetwork
 from trainer import DeepHedgingTrainer
-
 
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs" / "default.yaml"
 

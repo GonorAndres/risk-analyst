@@ -16,7 +16,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-
 # ---------------------------------------------------------------------------
 # Manual Saltelli sampling
 # ---------------------------------------------------------------------------
@@ -170,7 +169,7 @@ def run_sobol_analysis(
 
     # Try OpenTURNS first
     try:
-        import openturns as ot  # type: ignore[import-untyped]
+        import openturns as ot  # noqa: F401  # type: ignore[import-untyped]
         return _sobol_openturns(model_fn, factor_names, bounds, n_samples, seed)
     except ImportError:
         pass

@@ -26,7 +26,6 @@ from risk_analyst.models.copula import (
     tail_dependence,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic correlated data
 # ---------------------------------------------------------------------------

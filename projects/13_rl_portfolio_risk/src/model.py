@@ -13,13 +13,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yaml
-from numpy.typing import NDArray
-
 from agent import PolicyNetwork
 from benchmarks import equal_weight, mean_variance, risk_parity, run_benchmark
 from environment import PortfolioEnv
+from numpy.typing import NDArray
 from trainer import run_episode, train_rl_agent
-
 
 _DEFAULT_CONFIG_PATH = (
     Path(__file__).resolve().parent.parent / "configs" / "default.yaml"

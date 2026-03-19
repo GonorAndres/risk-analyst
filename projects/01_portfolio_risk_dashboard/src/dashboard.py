@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -23,14 +23,7 @@ from pydantic import BaseModel, Field
 
 from risk_analyst.data.market import compute_returns, fetch_prices
 from risk_analyst.measures.backtesting import BacktestReport, backtest_var
-from risk_analyst.measures.var import expected_shortfall
 from risk_analyst.utils.config import load_yaml
-from risk_analyst.visualization.risk_plots import (
-    plot_correlation_heatmap,
-    plot_loss_distribution,
-    plot_rolling_volatility,
-    plot_var_backtest,
-)
 
 try:
     from .model import RiskModel

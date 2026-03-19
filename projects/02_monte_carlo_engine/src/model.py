@@ -16,7 +16,7 @@ import numpy as np
 import yaml
 from numpy.typing import NDArray
 
-from risk_analyst.simulation.gbm import simulate_gbm, simulate_gbm_correlated
+from risk_analyst.simulation.gbm import simulate_gbm_correlated
 from risk_analyst.simulation.option_pricing import (
     bs_price,
     price_asian_option,
@@ -24,7 +24,6 @@ from risk_analyst.simulation.option_pricing import (
     price_european_option,
 )
 from risk_analyst.simulation.risk import mc_portfolio_es, mc_portfolio_var
-from risk_analyst.simulation.variance_reduction import antithetic_variates
 
 
 class MonteCarloEngine:

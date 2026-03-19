@@ -7,17 +7,16 @@ algorithm implemented in numpy.
 
 from __future__ import annotations
 
+# matplotlib imports with Agg backend for headless environments
+import matplotlib
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-# matplotlib imports with Agg backend for headless environments
-import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 
 def _fruchterman_reingold(

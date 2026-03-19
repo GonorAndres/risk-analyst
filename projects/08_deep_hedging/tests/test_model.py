@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from environment import HedgingEnvironment
 from network import NeuralNetwork
 from trainer import DeepHedgingTrainer
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -16,7 +16,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-
 # Scenario-specific intensity decline assumptions (fraction of base by 2050)
 _SCENARIO_INTENSITY_PATHS: dict[str, dict[int, float]] = {
     "net_zero_2050": {2025: 1.0, 2030: 0.70, 2040: 0.35, 2050: 0.20, 2070: 0.10, 2100: 0.05},

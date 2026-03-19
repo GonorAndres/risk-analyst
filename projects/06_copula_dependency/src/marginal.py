@@ -11,11 +11,8 @@ References:
 
 from __future__ import annotations
 
-from typing import Literal
-
 import numpy as np
 import pandas as pd
-from arch import arch_model
 from arch.univariate.base import ARCHModelResult
 from scipy import stats
 

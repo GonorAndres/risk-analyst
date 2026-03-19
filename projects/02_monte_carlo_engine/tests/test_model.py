@@ -17,7 +17,6 @@ from risk_analyst.simulation.gbm import simulate_gbm, simulate_gbm_correlated
 from risk_analyst.simulation.option_pricing import bs_price, price_european_option
 from risk_analyst.simulation.risk import mc_portfolio_es, mc_portfolio_var
 
-
 # -----------------------------------------------------------------------
 # 1. GBM expected value: E[S_T] = S_0 * exp(mu * T)
 # -----------------------------------------------------------------------

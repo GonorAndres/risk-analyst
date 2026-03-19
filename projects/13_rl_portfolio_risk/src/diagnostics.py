@@ -8,6 +8,7 @@ Reference: Follows the plotting pattern from P08 deep hedging diagnostics.
 from __future__ import annotations
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np

@@ -15,6 +15,9 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+# Project-local import (threshold.py lives in the same src/ directory)
+from threshold import select_threshold_auto
+
 from risk_analyst.models.evt import (
     evt_es,
     evt_var,
@@ -22,9 +25,6 @@ from risk_analyst.models.evt import (
     fit_gpd,
     return_level,
 )
-
-# Project-local import (threshold.py lives in the same src/ directory)
-from threshold import select_threshold_auto
 
 
 class EVTModel:

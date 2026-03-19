@@ -7,9 +7,7 @@ transition risk, physical risk, Sobol sensitivity, and TCFD reporting.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 import pytest
-
 
 # -----------------------------------------------------------------------
 # 1. Synthetic NGFS has 6 pathways

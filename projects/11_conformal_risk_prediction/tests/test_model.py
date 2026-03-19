@@ -16,24 +16,21 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
+from adaptive import (
+    AdaptiveConformalInference,
+    generate_regime_data,
+    run_aci_experiment,
+)
+from models import ConformalPD, QuantileRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 
 from risk_analyst.models.conformal import (
-    adaptive_conformal_update,
     conformal_prediction_interval,
     conformal_risk_control,
     cqr_interval,
     cqr_threshold,
     split_conformal_threshold,
 )
-
-from adaptive import (
-    AdaptiveConformalInference,
-    generate_regime_data,
-    run_aci_experiment,
-)
-from models import ConformalPD, ConformalVaR, QuantileRegressor
 
 
 # -----------------------------------------------------------------------
@@ -346,7 +343,6 @@ def test_bootstrap_similar_width(rng: np.random.Generator) -> None:
         np.mean(rng.choice(train, size=len(train), replace=True))
         for _ in range(n_boot)
     ])
-    from scipy import stats as sp_stats
 
     sigma = np.std(train, ddof=1)
     boot_half = (np.percentile(boot_means, 95) - np.percentile(boot_means, 5)) / 2 + sigma

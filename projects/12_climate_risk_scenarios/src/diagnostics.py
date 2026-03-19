@@ -8,6 +8,7 @@ asset exposure.
 from __future__ import annotations
 
 import matplotlib
+
 matplotlib.use("Agg")  # Non-interactive backend for CI/server
 
 import matplotlib.pyplot as plt

@@ -14,10 +14,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-
+from reverse_stress import reverse_stress_test
 from scenarios import get_dfast_scenarios, get_historical_scenarios
 from transmission import MacroTransmissionModel
-from reverse_stress import reverse_stress_test
 
 
 class StressTestFramework:

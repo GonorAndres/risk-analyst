@@ -22,7 +22,6 @@ from arch.univariate.base import ARCHModelResult
 from scipy import stats
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
-
 # ---------------------------------------------------------------------------
 # Time-series overlays
 # ---------------------------------------------------------------------------

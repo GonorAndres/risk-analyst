@@ -14,10 +14,9 @@ Reference:
 from __future__ import annotations
 
 import numpy as np
-from numpy.typing import NDArray
-
 from environment import HedgingEnvironment
 from network import NeuralNetwork
+from numpy.typing import NDArray
 
 
 class DeepHedgingTrainer:

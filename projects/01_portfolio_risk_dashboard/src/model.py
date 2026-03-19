@@ -43,7 +43,7 @@ class RiskModel:
         self._returns: pd.DataFrame | None = None
         self._weights: np.ndarray | None = None
 
-    def fit(self, returns: pd.DataFrame, weights: np.ndarray | list[float]) -> "RiskModel":
+    def fit(self, returns: pd.DataFrame, weights: np.ndarray | list[float]) -> RiskModel:
         """Fit the model with asset returns and portfolio weights.
 
         Computes and stores the portfolio loss series L_t = -r_{p,t}.

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from credit import (
     default_probability,
     hazard_rate_from_cds,
@@ -18,9 +17,8 @@ from credit import (
     survival_probability,
 )
 from cva import compute_bilateral_cva, compute_cva, cva_by_netting_set
-from exposure import apply_collateral, apply_netting, compute_exposure_profiles
+from exposure import apply_collateral, compute_exposure_profiles
 from instruments import InterestRateSwap, simulate_rate_paths
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

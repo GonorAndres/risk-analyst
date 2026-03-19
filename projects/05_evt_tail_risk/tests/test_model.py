@@ -14,25 +14,20 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from model import EVTModel
 from scipy import stats
-
-from risk_analyst.models.evt import (
-    evt_es,
-    evt_var,
-    fit_gev,
-    fit_gpd,
-    return_level,
-)
 
 # Project-local imports (conftest.py adds project src/ to sys.path)
 from threshold import (
     hill_estimator,
     mean_residual_life,
-    parameter_stability,
-    select_threshold_auto,
 )
-from model import EVTModel
 
+from risk_analyst.models.evt import (
+    evt_var,
+    fit_gev,
+    fit_gpd,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic data

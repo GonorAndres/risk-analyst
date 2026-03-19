@@ -17,14 +17,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 sys.path.insert(
     0, str(Path(__file__).resolve().parent.parent / "src")
 )
 
 from contagion import (
-    compute_debtrank,
     eisenberg_noe_clearing,
     simulate_cascade,
     systemic_importance,
@@ -32,10 +30,9 @@ from contagion import (
 from gcn import GCN
 from network import (
     compute_centrality,
-    generate_financial_network,
     network_stats,
 )
-from trainer import binary_cross_entropy, evaluate_gcn, train_gcn
+from trainer import binary_cross_entropy, train_gcn
 
 
 class TestNetworkGeneration:

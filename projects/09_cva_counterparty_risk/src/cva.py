@@ -9,14 +9,11 @@ Reference: Gregory (2020), Ch. 12 -- CVA.
 from __future__ import annotations
 
 import numpy as np
-from numpy.typing import NDArray
-
 from credit import (
     default_probability,
-    hazard_rate_from_cds,
-    survival_probability,
 )
-from exposure import apply_netting, compute_exposure_profiles
+from exposure import apply_netting
+from numpy.typing import NDArray
 
 
 def compute_cva(
